@@ -11,18 +11,27 @@ object ScalaApp {
     val conf = new SparkConf().setAppName("Sample Application").setMaster("local[2]")
     val sc = new SparkContext(conf)
     val sqlContext = new org.apache.spark.sql.SQLContext(sc)
-    val df = sqlContext.read.json("/Users/tscheys/ScalaApp/aws.json")
+    var df = sqlContext.read.json("/Users/tscheys/ScalaApp/aws.json")
 
     // inspect data
     df.show()
     df.printSchema()
 
     // change data types
-    val toDouble = udf[Double, String]( _.toDouble)
-    val featureDf = df
-      .withColumn("SpotPrice", toDouble(df("SpotPrice")))
-      .select("AvailabilityZone","InstanceType","SpotPrice")
-    featureDf.printSchema()
+    //def extractDate(a:String): String = a.substring(0, 9)
+
+    df = df
+      .withColumn("Spottmp", df("SpotPrice").cast("double"))
+      .drop("SpotPrice")
+      .withColumnRenamed("Spottmp","SpotPrice")
+      //.withColumn("Date", df("TimeStamp").split("T")[0])
+      //.select("AvailabilityZone","InstanceType","SpotPrice", "Timestamp", "Date")
+    // check if data type changed to double
+    df.show()
+    df.printSchema()
+
+    // features engineering
+    //df2.map(function )
 
   }
 }
