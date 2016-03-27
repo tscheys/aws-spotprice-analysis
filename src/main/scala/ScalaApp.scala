@@ -30,13 +30,17 @@ object ScalaApp {
     //.select("AvailabilityZone","InstanceType","SpotPrice", "Timestamp", "Date")
     // check if data type changed to double
     val splitDate = udf((s: String) => s.substring(0,10))
-    val splitTime = udf((s: String) => s.substring(11))
+    val splitTime = udf((s: String) => s.substring(11,19))
     val splitMinutes = udf((s: String) => s.substring(14,16))
     val splitHours = udf((s: String) => s.substring(11,13))
     val dayTime = udf((s: String) => {
       val hour = s.toInt
       if(hour >= 18 || hour <= 6) 0
       else 1
+    })
+
+    val combine = udf((a: String, b: String) => {
+      a + " " + b
     })
 
     /*val format = new java.text.SimpleDateFormat("yyyy-MM-dd")
@@ -51,9 +55,14 @@ object ScalaApp {
       .withColumn("Minutes", splitMinutes(col("Timestamp")))
 
     df = df
+      .withColumn("Stamp", combine(col("Date"), col("Time")))
+
+    df = df
       .withColumn("Daytime", dayTime(col("Hour")))
       //.withColumn("Weekday", isWeekDay(col("Date")))
-
+    // get unix timestamp from date and time information
+    df = df
+      .withColumn("Stamp2", unix_timestamp(col("Stamp")))
     df.show()
     df.printSchema()
 
