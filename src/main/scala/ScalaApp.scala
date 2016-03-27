@@ -18,20 +18,25 @@ object ScalaApp {
     df.printSchema()
 
     // change data types
-    //def extractDate(a:String): String = a.substring(0, 9)
+    def extractDate(a:String): String = a.substring(0, 9)
 
-    df = df
+    val df2 = df
       .withColumn("Spottmp", df("SpotPrice").cast("double"))
       .drop("SpotPrice")
       .withColumnRenamed("Spottmp","SpotPrice")
-      //.withColumn("Date", df("TimeStamp").split("T")[0])
-      //.select("AvailabilityZone","InstanceType","SpotPrice", "Timestamp", "Date")
+    val df3 = df2
+      .withColumn("Date", df("Timestamp"))
+    //.select("AvailabilityZone","InstanceType","SpotPrice", "Timestamp", "Date")
     // check if data type changed to double
-    df.show()
-    df.printSchema()
+    //def split1(a:String):
+    val split = (s: String) => s.substring(0,10)
+    val splitudf = udf(split)
 
-    // features engineering
-    //df2.map(function )
+    val nieuw = df3
+      .withColumn("Time", splitudf(col("Timestamp")))
+
+    nieuw.show()
+    nieuw.printSchema()
 
   }
 }
