@@ -32,12 +32,20 @@ object ScalaApp {
     val splitTime = udf((s: String) => s.substring(11))
     val splitMinutes = udf((s: String) => s.substring(14,16))
     val splitHours = udf((s: String) => s.substring(11,13))
+    val dayTime = udf((s: String) => {
+      val hour = s.toInt
+      if(hour >= 18 || hour <= 6) 0
+      else 1
+    })
 
     df = df
       .withColumn("Date", splitDate(col("Timestamp")))
       .withColumn("Time", splitTime(col("Timestamp")))
       .withColumn("Hour", splitHours(col("Timestamp")))
       .withColumn("Minutes", splitMinutes(col("Timestamp")))
+
+    df = df
+      .withColumn("Daytime", dayTime(col("Hour")))
 
     df.show()
     df.printSchema()
