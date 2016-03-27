@@ -4,6 +4,7 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.SparkConf
 import org.apache.spark.sql
 import org.apache.spark.sql.functions._
+import com.github.nscala_time.time.Imports._
 
 // main class
 object ScalaApp {
@@ -38,6 +39,11 @@ object ScalaApp {
       else 1
     })
 
+    /*val format = new java.text.SimpleDateFormat("yyyy-MM-dd")
+    val isWeekDay = udf((s: String) => {
+      val date = format.parse(s)
+    })*/
+
     df = df
       .withColumn("Date", splitDate(col("Timestamp")))
       .withColumn("Time", splitTime(col("Timestamp")))
@@ -46,6 +52,7 @@ object ScalaApp {
 
     df = df
       .withColumn("Daytime", dayTime(col("Hour")))
+      //.withColumn("Weekday", isWeekDay(col("Date")))
 
     df.show()
     df.printSchema()
