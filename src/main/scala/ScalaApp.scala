@@ -20,23 +20,27 @@ object ScalaApp {
     // change data types
     def extractDate(a:String): String = a.substring(0, 9)
 
-    val df2 = df
+    df = df
       .withColumn("Spottmp", df("SpotPrice").cast("double"))
       .drop("SpotPrice")
       .withColumnRenamed("Spottmp","SpotPrice")
-    val df3 = df2
+    df = df
       .withColumn("Date", df("Timestamp"))
     //.select("AvailabilityZone","InstanceType","SpotPrice", "Timestamp", "Date")
     // check if data type changed to double
-    //def split1(a:String):
-    val split = (s: String) => s.substring(0,10)
-    val splitudf = udf(split)
+    val splitDate = udf((s: String) => s.substring(0,10))
+    val splitTime = udf((s: String) => s.substring(11))
+    val splitMinutes = udf((s: String) => s.substring(14,16))
+    val splitHours = udf((s: String) => s.substring(11,13))
 
-    val nieuw = df3
-      .withColumn("Time", splitudf(col("Timestamp")))
+    df = df
+      .withColumn("Date", splitDate(col("Timestamp")))
+      .withColumn("Time", splitTime(col("Timestamp")))
+      .withColumn("Hour", splitHours(col("Timestamp")))
+      .withColumn("Minutes", splitMinutes(col("Timestamp")))
 
-    nieuw.show()
-    nieuw.printSchema()
+    df.show()
+    df.printSchema()
 
   }
 }
