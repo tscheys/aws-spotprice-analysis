@@ -43,11 +43,6 @@ object ScalaApp {
       a + " " + b
     })
 
-    /*val format = new java.text.SimpleDateFormat("yyyy-MM-dd")
-    val isWeekDay = udf((s: String) => {
-      val date = format.parse(s)
-    })*/
-
     df = df
       .withColumn("Date", splitDate(col("Timestamp")))
       .withColumn("Time", splitTime(col("Timestamp")))
@@ -59,10 +54,32 @@ object ScalaApp {
 
     df = df
       .withColumn("Daytime", dayTime(col("Hour")))
-      //.withColumn("Weekday", isWeekDay(col("Date")))
+
     // get unix timestamp from date and time information
     df = df
       .withColumn("Stamp2", unix_timestamp(col("Stamp")))
+
+    // is date weekday or weekend?
+    /*val isWeekDay = udf((date: String) => {
+      val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
+      val dt = fmt.parseDateTime(date)
+      if(dt < 6) {1} else {0}
+    })*/
+
+    val getSeconds = udf((time: String) => {
+      // split time on :
+      val times = time.split(":")
+      times(0).toInt * 3600 + times(1).toInt * 60 + times (2).toInt
+    })
+
+    /*df = df
+      .withColumn("IsWeekDay", isWeekDay(col("Date")))*/
+
+    df = df
+      .withColumn("SecondsDay", getSeconds(col("Time")))
+
+    // null unwanted variables from model
+
     df.show()
     df.printSchema()
 
