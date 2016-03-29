@@ -4,6 +4,7 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.SparkConf
 import org.apache.spark.sql
 import org.apache.spark.sql.functions._
+//import sqlContext.implicits._
 import com.github.nscala_time.time.Imports._
 
 // main class
@@ -90,7 +91,6 @@ object ScalaApp {
 
     df =  df.sort(col("AvailabilityZone"), col("InstanceType"), col("Stamp2").asc)
 
-    //val subset = df.sql("SELECT * FROM df")
     df.show()
     df.printSchema()
 
@@ -100,7 +100,28 @@ object ScalaApp {
     asiac3.show()
     println(asiac3.count())
 
+    // make extra column to offset by one row
+    asiac3.
+      withColumn("PreviousPrice", col("SpotPrice"))
+
     asiac3.registerTempTable("asia")
+    // experiment with sql quering
+    val filter = sqlContext.sql("SELECT * FROM asia")
+    filter.show()
+
+    // try to query a dataframe the sql way
+
+    // try to apply the window lag function on this query
+
+    // if we get stuck here, make a column with random numbers
+
+    // then remove all unwanted variables for models
+
+    // import mllib
+
+    // make a simple linear regression
+
+    // try out other techniques in the library
 
   }
 }
