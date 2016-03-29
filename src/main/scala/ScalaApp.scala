@@ -72,35 +72,31 @@ object ScalaApp {
     df.show()
     df.printSchema()
 
-    // null unwanted variables from model
+    // create lagged (t-1) spot price variable
+    df.registerTempTable("cleanData")
 
-    //df =  df.sort(col("AvailabilityZone"), col("InstanceType"), col("Stamp2").asc)
+    // use Spark window function to lag()
+    df = sqlContext.sql("SELECT a.availabilityZone, a.instanceType,a.date,a.time, a.unixTime, a.spotPrice, lag(a.spotPrice) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.unixTime) AS previousPrice FROM cleanData a")
 
-    //df.show()
-    //df.printSchema()
+    // check if lag() was done correctly
+    df.show(400)
+    df.printSchema()
 
-    //subset
+    // subtract function
+    def subtract = udf((price1: Double, price2: Double) => {
+      price1 - price2
+    })
 
-   /* val asiac3 = df.where(df("AvailabilityZone") === "ap-southeast-1a" && df("InstanceType") === "c3.large")
-    asiac3.show()
-    println(asiac3.count())
+    // subtract current spot price from previous spot price to get priceChange column
 
-    // make extra column to offset by one row
-    asiac3.
-      withColumn("PreviousPrice", col("SpotPrice"))
+    df = df
+      .withColumn("priceChange", subtract(col("spotPrice"), col("previousPrice")))
 
-    asiac3.registerTempTable("asia")
-    // experiment with sql quering
-    val filter = sqlContext.sql("SELECT a.AvailabilityZone,a.Date,a.Time, a.Stamp2,a.SpotPrice, lag(a.SpotPrice) OVER (PARTITION BY a.AvailabilityZone ORDER BY a.Stamp2) AS PreviousPrice FROM asia a")
-    filter.show()
-    filter.printSchema()  */
+    // do check
+    df.show()
+    df.printSchema()
 
-    // try to query a dataframe the sql way x
-
-    // try to apply the window lag function on this query x
-
-    // if we get stuck here, make a column with random numbers
-
+    // modeling phase
     // then remove all unwanted variables for models
 
     // import mllib
