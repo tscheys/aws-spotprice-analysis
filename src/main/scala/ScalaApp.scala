@@ -29,17 +29,17 @@ object ScalaApp {
       .withColumn("Date", df("Timestamp"))
     //.select("AvailabilityZone","InstanceType","SpotPrice", "Timestamp", "Date")
     // check if data type changed to double
-    val splitDate = udf((s: String) => s.substring(0,10))
-    val splitTime = udf((s: String) => s.substring(11,19))
-    val splitMinutes = udf((s: String) => s.substring(14,16))
-    val splitHours = udf((s: String) => s.substring(11,13))
-    val dayTime = udf((s: String) => {
+    def splitDate = udf((s: String) => s.substring(0,10))
+    def splitTime = udf((s: String) => s.substring(11,19))
+    def splitMinutes = udf((s: String) => s.substring(14,16))
+    def splitHours = udf((s: String) => s.substring(11,13))
+    def dayTime = udf((s: String) => {
       val hour = s.toInt
       if(hour >= 18 || hour <= 6) 0
       else 1
     })
 
-    val combine = udf((a: String, b: String) => {
+    def combine = udf((a: String, b: String) => {
       a + " " + b
     })
 
@@ -60,20 +60,20 @@ object ScalaApp {
       .withColumn("Stamp2", unix_timestamp(col("Stamp")))
 
     // is date weekday or weekend?
-    val isWeekDay = udf((date: String) => {
+    def isWeekDay = udf((date: String) => {
       val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
       val dt = fmt.parseDateTime(date)
       if(dt.getDayOfWeek < 6) {1} else {0}
     })
 
     // get day of week
-    val dow = udf((date: String) => {
+    def dow = udf((date: String) => {
       val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
       val dt = fmt.parseDateTime(date)
       dt.getDayOfWeek
     })
 
-    val getSeconds = udf((time: String) => {
+    def getSeconds = udf((time: String) => {
       // split time on :
       val times = time.split(":")
       times(0).toInt * 3600 + times(1).toInt * 60 + times (2).toInt
@@ -94,7 +94,13 @@ object ScalaApp {
     df.show()
     df.printSchema()
 
-    //subset.show()
+    //subset
+
+    val asiac3 = df.where(df("AvailabilityZone") === "ap-southeast-1a" && df("InstanceType") === "c3.large")
+    asiac3.show()
+    println(asiac3.count())
+
+    asiac3.registerTempTable("asia")
 
   }
 }
