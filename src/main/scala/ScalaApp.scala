@@ -60,11 +60,18 @@ object ScalaApp {
       .withColumn("Stamp2", unix_timestamp(col("Stamp")))
 
     // is date weekday or weekend?
-    /*val isWeekDay = udf((date: String) => {
+    val isWeekDay = udf((date: String) => {
       val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
       val dt = fmt.parseDateTime(date)
-      if(dt < 6) {1} else {0}
-    })*/
+      if(dt.getDayOfWeek < 6) {1} else {0}
+    })
+
+    // get day of week
+    val dow = udf((date: String) => {
+      val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
+      val dt = fmt.parseDateTime(date)
+      dt.getDayOfWeek
+    })
 
     val getSeconds = udf((time: String) => {
       // split time on :
@@ -72,16 +79,22 @@ object ScalaApp {
       times(0).toInt * 3600 + times(1).toInt * 60 + times (2).toInt
     })
 
-    /*df = df
-      .withColumn("IsWeekDay", isWeekDay(col("Date")))*/
+    df = df
+      .withColumn("IsWeekDay", isWeekDay(col("Date")))
+      .withColumn("Dayofweek", dow(col("Date")))
 
     df = df
       .withColumn("SecondsDay", getSeconds(col("Time")))
 
     // null unwanted variables from model
 
+    df =  df.sort(col("AvailabilityZone"), col("InstanceType"), col("Stamp2").asc)
+
+    //val subset = df.sql("SELECT * FROM df")
     df.show()
     df.printSchema()
+
+    //subset.show()
 
   }
 }
