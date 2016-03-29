@@ -4,6 +4,7 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.SparkConf
 import org.apache.spark.sql
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.hive
 //import sqlContext.implicits._
 import com.github.nscala_time.time.Imports._
 
@@ -12,7 +13,7 @@ object ScalaApp {
   def main(args: Array[String]) {
     val conf = new SparkConf().setAppName("Sample Application").setMaster("local[2]")
     val sc = new SparkContext(conf)
-    val sqlContext = new org.apache.spark.sql.SQLContext(sc)
+    val sqlContext = new org.apache.spark.sql.hive.HiveContext(sc)
     var df = sqlContext.read.json("/Users/tscheys/ScalaApp/aws.json")
 
     // inspect data
@@ -61,7 +62,7 @@ object ScalaApp {
       .withColumn("Stamp2", unix_timestamp(col("Stamp")))
 
     // is date weekday or weekend?
-    def isWeekDay = udf((date: String) => {
+    /*def isWeekDay = udf((date: String) => {
       val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
       val dt = fmt.parseDateTime(date)
       if(dt.getDayOfWeek < 6) {1} else {0}
@@ -72,7 +73,7 @@ object ScalaApp {
       val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
       val dt = fmt.parseDateTime(date)
       dt.getDayOfWeek
-    })
+    }) */
 
     def getSeconds = udf((time: String) => {
       // split time on :
@@ -80,9 +81,9 @@ object ScalaApp {
       times(0).toInt * 3600 + times(1).toInt * 60 + times (2).toInt
     })
 
-    df = df
+    /*df = df
       .withColumn("IsWeekDay", isWeekDay(col("Date")))
-      .withColumn("Dayofweek", dow(col("Date")))
+      .withColumn("Dayofweek", dow(col("Date")))*/
 
     df = df
       .withColumn("SecondsDay", getSeconds(col("Time")))
@@ -106,12 +107,12 @@ object ScalaApp {
 
     asiac3.registerTempTable("asia")
     // experiment with sql quering
-    val filter = sqlContext.sql("SELECT * FROM asia")
+    val filter = sqlContext.sql("SELECT a.AvailabilityZone,a.Time, a.Stamp2,a.SpotPrice, lag(a.SpotPrice) OVER (PARTITION BY a.AvailabilityZone ORDER BY a.Stamp2) AS PreviousPrice FROM asia a")
     filter.show()
 
-    // try to query a dataframe the sql way
+    // try to query a dataframe the sql way x
 
-    // try to apply the window lag function on this query
+    // try to apply the window lag function on this query x
 
     // if we get stuck here, make a column with random numbers
 
