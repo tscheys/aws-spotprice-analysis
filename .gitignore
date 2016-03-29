@@ -6,3 +6,5 @@ bin/
 .project
 .settings/
 .cache-main
+derby.log
+metastore_db/
