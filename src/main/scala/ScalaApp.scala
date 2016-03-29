@@ -1,103 +1,87 @@
-// import dependencies
+// import spark dependencies
 import org.apache.spark.SparkContext
-import org.apache.spark.SparkContext._
 import org.apache.spark.SparkConf
-import org.apache.spark.sql
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive
-//import sqlContext.implicits._
+// import jodatime
 import com.github.nscala_time.time.Imports._
 
 // main class
 object ScalaApp {
   def main(args: Array[String]) {
-    val conf = new SparkConf().setAppName("Sample Application").setMaster("local[2]")
+    val conf = new SparkConf().setAppName("SpotPriceAnalysis").setMaster("local[2]")
     val sc = new SparkContext(conf)
     val sqlContext = new org.apache.spark.sql.hive.HiveContext(sc)
     var df = sqlContext.read.json("/Users/tscheys/ScalaApp/aws.json")
 
-    // inspect data
+    // inspect data and schema
     df.show()
     df.printSchema()
 
-    // change data types
-    def extractDate(a:String): String = a.substring(0, 9)
+    // apply correct types to columns
+    // rename other columns to camelCase
+    df = df
+      .withColumn("spotPrice", col("SpotPrice").cast("Double"))
+      .withColumnRenamed("AvailabilityZone", "availabilityZone")
+      .withColumnRenamed("InstanceType", "instanceType")
+      .withColumnRenamed("ProductDescription", "productDescription")
+      .withColumnRenamed("Timestamp", "timeStamp")
 
-    df = df
-      .withColumn("Spottmp", df("SpotPrice").cast("double"))
-      .drop("SpotPrice")
-      .withColumnRenamed("Spottmp","SpotPrice")
-    df = df
-      .withColumn("Date", df("Timestamp"))
-    //.select("AvailabilityZone","InstanceType","SpotPrice", "Timestamp", "Date")
-    // check if data type changed to double
-    def splitDate = udf((s: String) => s.substring(0,10))
-    def splitTime = udf((s: String) => s.substring(11,19))
-    def splitMinutes = udf((s: String) => s.substring(14,16))
-    def splitHours = udf((s: String) => s.substring(11,13))
-    def dayTime = udf((s: String) => {
-      val hour = s.toInt
+    // create binary for day/night time
+    def dayTime = udf((hour: Integer) => {
       if(hour >= 18 || hour <= 6) 0
       else 1
     })
 
-    def combine = udf((a: String, b: String) => {
-      a + " " + b
-    })
-
-    df = df
-      .withColumn("Date", splitDate(col("Timestamp")))
-      .withColumn("Time", splitTime(col("Timestamp")))
-      .withColumn("Hour", splitHours(col("Timestamp")))
-      .withColumn("Minutes", splitMinutes(col("Timestamp")))
-
-    df = df
-      .withColumn("Stamp", combine(col("Date"), col("Time")))
-
-    df = df
-      .withColumn("Daytime", dayTime(col("Hour")))
-
-    // get unix timestamp from date and time information
-    df = df
-      .withColumn("Stamp2", unix_timestamp(col("Stamp")))
-
-    // is date weekday or weekend?
-    /*def isWeekDay = udf((date: String) => {
+    // create binary for weekday/weekend
+    def isWeekDay = udf((date: String) => {
       val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
       val dt = fmt.parseDateTime(date)
       if(dt.getDayOfWeek < 6) {1} else {0}
     })
 
     // get day of week
-    def dow = udf((date: String) => {
+    def dayOfWeek = udf((date: String) => {
       val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
       val dt = fmt.parseDateTime(date)
       dt.getDayOfWeek
-    }) */
-
-    def getSeconds = udf((time: String) => {
-      // split time on :
-      val times = time.split(":")
-      times(0).toInt * 3600 + times(1).toInt * 60 + times (2).toInt
     })
 
-    /*df = df
-      .withColumn("IsWeekDay", isWeekDay(col("Date")))
-      .withColumn("Dayofweek", dow(col("Date")))*/
+    def getSeconds = udf((hours: Integer, minutes: Integer, seconds: Integer) => {
+      hours * 3600 + minutes * 60 + seconds
+    })
+
+    // create time variables
+    df = df
+      .withColumn("date", substring(col("timeStamp"), 0, 10))
+      .withColumn("time", substring(col("timeStamp"), 12,8))
+      .withColumn("hours", substring(col("timeStamp"), 12,2).cast("Int"))
+      .withColumn("minutes", substring(col("timeStamp"), 15,2).cast("Int"))
+      .withColumn("seconds", substring(col("timeStamp"), 18,2).cast("Int"))
+      .withColumn("unixTime", unix_timestamp(concat_ws(" ", col("date"), col("time"))))
+      .withColumn("isDaytime", dayTime(col("hours")))
 
     df = df
-      .withColumn("SecondsDay", getSeconds(col("Time")))
+      .withColumn("isWeekDay", isWeekDay(col("date")))
+      .withColumn("dayOfWeek", dayOfWeek(col("date")))
 
-    // null unwanted variables from model
+    df = df
+      .withColumn("SecondsDay", getSeconds(col("hours"), col("minutes"), col("seconds")))
 
-    df =  df.sort(col("AvailabilityZone"), col("InstanceType"), col("Stamp2").asc)
-
+    // make sure changes to columns are correct
     df.show()
     df.printSchema()
 
+    // null unwanted variables from model
+
+    //df =  df.sort(col("AvailabilityZone"), col("InstanceType"), col("Stamp2").asc)
+
+    //df.show()
+    //df.printSchema()
+
     //subset
 
-    val asiac3 = df.where(df("AvailabilityZone") === "ap-southeast-1a" && df("InstanceType") === "c3.large")
+   /* val asiac3 = df.where(df("AvailabilityZone") === "ap-southeast-1a" && df("InstanceType") === "c3.large")
     asiac3.show()
     println(asiac3.count())
 
@@ -107,8 +91,9 @@ object ScalaApp {
 
     asiac3.registerTempTable("asia")
     // experiment with sql quering
-    val filter = sqlContext.sql("SELECT a.AvailabilityZone,a.Time, a.Stamp2,a.SpotPrice, lag(a.SpotPrice) OVER (PARTITION BY a.AvailabilityZone ORDER BY a.Stamp2) AS PreviousPrice FROM asia a")
+    val filter = sqlContext.sql("SELECT a.AvailabilityZone,a.Date,a.Time, a.Stamp2,a.SpotPrice, lag(a.SpotPrice) OVER (PARTITION BY a.AvailabilityZone ORDER BY a.Stamp2) AS PreviousPrice FROM asia a")
     filter.show()
+    filter.printSchema()  */
 
     // try to query a dataframe the sql way x
 
