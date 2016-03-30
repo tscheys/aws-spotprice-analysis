@@ -4,6 +4,11 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive
 import org.apache.spark.sql.hive._
+import org.apache.spark.ml
+import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
+import org.apache.spark.ml._
+import org.apache.spark.rdd.RDD
 // import jodatime
 import com.github.nscala_time.time.Imports._
 
@@ -77,7 +82,7 @@ object ScalaApp {
     df.registerTempTable("cleanData")
 
     // use Spark window function to lag()
-    df = sqlContext.sql("SELECT a.availabilityZone, a.instanceType,a.date,a.time, a.unixTime, a.spotPrice, lag(a.spotPrice) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.unixTime) AS previousPrice FROM cleanData a")
+    df = sqlContext.sql("SELECT a.*, lag(a.spotPrice) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.unixTime) AS previousPrice FROM cleanData a")
 
     // check if lag() was done correctly
     df.show(400)
@@ -87,11 +92,23 @@ object ScalaApp {
     def subtract = udf((price1: Double, price2: Double) => {
       price1 - price2
     })
+    // TODO: simplify these 2 functions
+    def hasIncrease = udf((change: Double) => {
+      if(change > 0) 1
+      else 0
+    })
+
+    def hasDecrease = udf((change: Double) => {
+      if(change < 0) 1
+      else 0
+    })
 
     // subtract current spot price from previous spot price to get priceChange column
 
     df = df
       .withColumn("priceChange", subtract(col("spotPrice"), col("previousPrice")))
+      .withColumn("increase", hasIncrease(col("priceChange")))
+      .withColumn("decrease", hasDecrease(col("priceChange")))
 
     // do check
     df.show()
@@ -100,13 +117,18 @@ object ScalaApp {
     // modeling phase
     // then remove all unwanted variables for models
 
-    // import mllib
+    // import mllib x
 
     // make a simple linear regression
+    val observations: RDD[Row] = df.rdd
+
+    val summary = Statistics.colStats(observations)
 
     // try out other techniques in the library
 
     // split into val, test and train
+
+    // evaluate performance of model
 
     // adjustments to make to the data set
 
