@@ -9,6 +9,7 @@ import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
 import org.apache.spark.ml._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.RDD._
 // import jodatime
 import com.github.nscala_time.time.Imports._
 
@@ -120,13 +121,15 @@ object ScalaApp {
     // import mllib x
 
     // make a simple linear regression
-    val observations: RDD[Row] = df.rdd
+    //val observations: RDD[Vector] = df.rdd
 
-    val summary = Statistics.colStats(observations)
+    //val summary = Statistics.colStats(observations)
 
     // try out other techniques in the library
 
     // split into val, test and train
+
+    val Array(train, validation, test) = df.randomSplit(Array(0.8,0.2,0.2))
 
     // evaluate performance of model
 
