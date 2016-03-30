@@ -3,6 +3,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive
+import org.apache.spark.sql.hive._
 // import jodatime
 import com.github.nscala_time.time.Imports._
 
@@ -104,6 +105,14 @@ object ScalaApp {
     // make a simple linear regression
 
     // try out other techniques in the library
+
+    // split into val, test and train
+
+    // adjustments to make to the data set
+
+      // interpolate daat points/ average out over 10 minutes ?
+      // average out over subregions (1a, 1b,...)
+      // bovenstaande taken samen nemen (aggregaten)
 
   }
 }
