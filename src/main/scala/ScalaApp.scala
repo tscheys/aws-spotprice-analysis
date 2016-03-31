@@ -5,13 +5,25 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive
 import org.apache.spark.sql.hive._
 import org.apache.spark.ml
-import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
 import org.apache.spark.ml._
-import org.apache.spark.rdd.RDD
-import org.apache.spark.rdd.RDD._
 // import jodatime
 import com.github.nscala_time.time.Imports._
+import org.apache.spark.rdd
+import org.apache.spark.rdd._
+// ml deps
+import org.apache.spark.ml.Pipeline
+import org.apache.spark.ml.classification.DecisionTreeClassifier
+import org.apache.spark.ml.classification.DecisionTreeClassificationModel
+import org.apache.spark.ml.feature.{StringIndexer, IndexToString, VectorIndexer}
+import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
+import org.apache.spark.ml.classification.{RandomForestClassificationModel, RandomForestClassifier}
+import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
+
+import org.apache.spark.mllib.classification.{SVMModel, SVMWithSGD}
+import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
+import org.apache.spark.mllib.util.MLUtils
+
+import org.apache.spark.ml.feature.VectorAssembler
 
 // main class
 object ScalaApp {
@@ -111,25 +123,55 @@ object ScalaApp {
       .withColumn("increase", hasIncrease(col("priceChange")))
       .withColumn("decrease", hasDecrease(col("priceChange")))
 
+    // narrow down dataset for regression try
+    df.registerTempTable("data")
+    df = sqlContext.sql("SELECT unixTime, spotPrice, priceChange, increase FROM data WHERE availabilityZone = 'ap-southeast-1b' AND instanceType= 'm1.medium'")
+
     // do check
-    df.show()
+    df.show(400)
     df.printSchema()
 
-    // modeling phase
-    // then remove all unwanted variables for models
+    //val rdd: RDD[Vector] = df.rdd
 
-    // import mllib x
+    /*val labelIndexer = new StringIndexer()
+      .setInputCol("label")
+      .setOutputCol("indexedLabel")
+      .fit(df)
+    val featureIndexer = new VectorIndexer()
+      .setInputCol("features")
+      .setOutputCol("indexedFeatures")
+      .setMaxCategories(4)
+      .fit(df)*/
+
+    // Train a RandomForest model.
+    /*val rf = new RandomForestClassifier()
+      .setLabelCol("indexedLabel")
+      .setFeaturesCol("indexedFeatures")
+      .setNumTrees(10)
+
+    println(rf)*/
 
     // make a simple linear regression
-    //val observations: RDD[Vector] = df.rdd
-
-    //val summary = Statistics.colStats(observations)
 
     // try out other techniques in the library
 
-    // split into val, test and train
-
     val Array(train, validation, test) = df.randomSplit(Array(0.8,0.2,0.2))
+
+    // check if split worked
+
+    train.show()
+    validation.show()
+    test.show()
+
+    val assembler = new VectorAssembler()
+      .setInputCols(Array("unixTime", "spotPrice", "priceChange"))
+      .setOutputCol("features")
+    //val labeled = df.map(row => LabeledPoint(row.getDouble(0), row(4).asInstanceOf[Vector]))
+
+    //val numIterations = 100
+    //val model = SVMWithSGD.train(labeled, numIterations)
+
+    // check if these 3 sets do not overlap
 
     // evaluate performance of model
 
