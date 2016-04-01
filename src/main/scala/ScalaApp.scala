@@ -123,32 +123,15 @@ object ScalaApp {
 
     df = df
       .withColumn("priceChange", subtract(col("spotPrice"), col("previousPrice")))
-      .withColumn("increase", hasIncrease(col("priceChange")))
-      .withColumn("decrease", hasDecrease(col("priceChange")))
+      .withColumn("increase", hasIncrease(col("priceChange")).cast("Double"))
+      .withColumn("decrease", hasDecrease(col("priceChange")).cast("Double"))
 
     // narrow down dataset for regression
     df.registerTempTable("data")
     df = sqlContext.sql("SELECT unixTime, spotPrice, priceChange, increase FROM data WHERE availabilityZone = 'ap-southeast-1b' AND instanceType= 'm1.medium'")
 
-    // do check
-    df.show(400)
-    df.printSchema()
-
-    // try out other techniques in the library
-
-    val Array(train, validation, test) = df.randomSplit(Array(0.8,0.2,0.2))
-
-    // check if split worked
-
-    train.show()
-    validation.show()
-    test.show()
-
-    val yess = train.na.fill(0.0, Seq("priceChange", "increase"))
-    val yesss = yess
-      .withColumn("increase", col("increase").cast("Double"))
-
-    yesss.show()
+    // impute na's
+    df = df.na.fill(0.0, Seq("priceChange", "increase"))
 
     val assembler = new VectorAssembler()
       .setInputCols(Array("unixTime", "spotPrice", "priceChange"))
@@ -159,10 +142,17 @@ object ScalaApp {
       .setOutputCol("label")
       .setThreshold(0.5)
 
-    val output = assembler.transform(yesss)
-    val trainDef = output.select("features", "increase")
+    // prepare variables for logit
+    df = assembler.transform(df)
+    df.show()
+    df = df.select("features", "increase")
+    df = binarizer.transform(df)
 
-    val finale = binarizer.transform(trainDef)
+    val Array(train, validation, test) = df.randomSplit(Array(0.8,0.2,0.2))
+
+    // check if split worked
+
+    //train.show()
 
     // do logistic regression
 
@@ -172,7 +162,7 @@ object ScalaApp {
       .setElasticNetParam(0.8)
 
     // Fit the model
-    val lrModel = lr.fit(finale)
+    val lrModel = lr.fit(train)
 
     println(s"Coefficients: ${lrModel.coefficients} Intercept: ${lrModel.intercept}")
 
