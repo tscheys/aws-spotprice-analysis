@@ -24,6 +24,9 @@ import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.util.MLUtils
 
 import org.apache.spark.ml.feature.VectorAssembler
+import org.apache.spark.ml.feature.Binarizer
+
+import org.apache.spark.ml.classification.LogisticRegression
 
 // main class
 object ScalaApp {
@@ -123,35 +126,13 @@ object ScalaApp {
       .withColumn("increase", hasIncrease(col("priceChange")))
       .withColumn("decrease", hasDecrease(col("priceChange")))
 
-    // narrow down dataset for regression try
+    // narrow down dataset for regression
     df.registerTempTable("data")
     df = sqlContext.sql("SELECT unixTime, spotPrice, priceChange, increase FROM data WHERE availabilityZone = 'ap-southeast-1b' AND instanceType= 'm1.medium'")
 
     // do check
     df.show(400)
     df.printSchema()
-
-    //val rdd: RDD[Vector] = df.rdd
-
-    /*val labelIndexer = new StringIndexer()
-      .setInputCol("label")
-      .setOutputCol("indexedLabel")
-      .fit(df)
-    val featureIndexer = new VectorIndexer()
-      .setInputCol("features")
-      .setOutputCol("indexedFeatures")
-      .setMaxCategories(4)
-      .fit(df)*/
-
-    // Train a RandomForest model.
-    /*val rf = new RandomForestClassifier()
-      .setLabelCol("indexedLabel")
-      .setFeaturesCol("indexedFeatures")
-      .setNumTrees(10)
-
-    println(rf)*/
-
-    // make a simple linear regression
 
     // try out other techniques in the library
 
@@ -163,9 +144,38 @@ object ScalaApp {
     validation.show()
     test.show()
 
+    val yess = train.na.fill(0.0, Seq("priceChange", "increase"))
+    val yesss = yess
+      .withColumn("increase", col("increase").cast("Double"))
+
+    yesss.show()
+
     val assembler = new VectorAssembler()
       .setInputCols(Array("unixTime", "spotPrice", "priceChange"))
       .setOutputCol("features")
+    // convert increase to binary variable
+    val binarizer: Binarizer = new Binarizer()
+      .setInputCol("increase")
+      .setOutputCol("label")
+      .setThreshold(0.5)
+
+    val output = assembler.transform(yesss)
+    val trainDef = output.select("features", "increase")
+
+    val finale = binarizer.transform(trainDef)
+
+    // do logistic regression
+
+    val lr = new LogisticRegression()
+      .setMaxIter(10)
+      .setRegParam(0.3)
+      .setElasticNetParam(0.8)
+
+    // Fit the model
+    val lrModel = lr.fit(finale)
+
+    println(s"Coefficients: ${lrModel.coefficients} Intercept: ${lrModel.intercept}")
+
     //val labeled = df.map(row => LabeledPoint(row.getDouble(0), row(4).asInstanceOf[Vector]))
 
     //val numIterations = 100
