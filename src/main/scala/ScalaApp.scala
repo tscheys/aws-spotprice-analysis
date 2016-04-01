@@ -28,6 +28,8 @@ import org.apache.spark.ml.feature.Binarizer
 
 import org.apache.spark.ml.classification.LogisticRegression
 
+import org.apache.spark.ml.classification.{BinaryLogisticRegressionSummary, LogisticRegression}
+
 // main class
 object ScalaApp {
   def main(args: Array[String]) {
@@ -145,8 +147,8 @@ object ScalaApp {
     // prepare variables for logit
     df = assembler.transform(df)
     df.show()
-    df = df.select("features", "increase")
     df = binarizer.transform(df)
+    df = df.select("features", "label")
 
     val Array(train, validation, test) = df.randomSplit(Array(0.8,0.2,0.2))
 
@@ -164,22 +166,30 @@ object ScalaApp {
     // Fit the model
     val lrModel = lr.fit(train)
 
+    val trainingSummary = lrModel.summary
+
+    // Obtain the objective per iteration.
+    val objectiveHistory = trainingSummary.objectiveHistory
+    objectiveHistory.foreach(loss => println(loss))
+
+    // Obtain the metrics useful to judge performance on test data.
+    // We cast the summary to a BinaryLogisticRegressionSummary since the problem is a
+    // binary classification problem.
+    val binarySummary = trainingSummary.asInstanceOf[BinaryLogisticRegressionSummary]
+
+    // Obtain the receiver-operating characteristic as a dataframe and areaUnderROC.
+    val roc = binarySummary.roc
+    roc.show()
+    println(binarySummary.areaUnderROC)
+
+    // Set the model threshold to maximize F-Measure
+    val fMeasure = binarySummary.fMeasureByThreshold
+    //val maxFMeasure = fMeasure.select(max("F-Measure")).head().getDouble(0)
+    //val bestThreshold = fMeasure.where($"F-Measure" === maxFMeasure)
+    //  .select("threshold").head().getDouble(0)
+    //lrModel.setThreshold(bestThreshold)
+
     println(s"Coefficients: ${lrModel.coefficients} Intercept: ${lrModel.intercept}")
-
-    //val labeled = df.map(row => LabeledPoint(row.getDouble(0), row(4).asInstanceOf[Vector]))
-
-    //val numIterations = 100
-    //val model = SVMWithSGD.train(labeled, numIterations)
-
-    // check if these 3 sets do not overlap
-
-    // evaluate performance of model
-
-    // adjustments to make to the data set
-
-      // interpolate daat points/ average out over 10 minutes ?
-      // average out over subregions (1a, 1b,...)
-      // bovenstaande taken samen nemen (aggregaten)
 
   }
 }
