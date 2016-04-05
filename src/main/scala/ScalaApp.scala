@@ -127,7 +127,44 @@ object ScalaApp {
       .withColumn("priceChange", subtract(col("spotPrice"), col("previousPrice")))
       .withColumn("increase", hasIncrease(col("priceChange")).cast("Double"))
       .withColumn("decrease", hasDecrease(col("priceChange")).cast("Double"))
+    def combine = udf((a:String, b: Int, c: Int) => {
+      // this function is really bad TODO rewrite!
+      var a1 = a.replace("-","")
+      var d = 0
 
+      if(b < 10) {
+        a1 = a1.concat("0")
+      }
+      if(c < 15) {
+        d = 1
+      } else if(c >= 15 && c < 30) {
+        d = 2
+      } else if(c >= 30 && c < 45) {
+        d = 3
+      } else {
+        d = 4
+      }
+
+      a1 + b + d
+
+    })
+
+    // create aggregation variable (average spot price over every 15 minutes)
+
+    // length of strings is not the same
+    // field is not of integer type
+    // date is not split up properly
+
+    // first, get decent, dense data
+    df.registerTempTable("data")
+    df = sqlContext.sql("SELECT date, hours, minutes, spotPrice FROM data WHERE availabilityZone = 'us-west-2a' AND instanceType = 'g2.2xlarge'")
+    df = df.withColumn("aggregation", combine(col("date"), col("hours"), col("minutes")).cast("Double"))
+
+    // aggregation solved
+    df = df.groupBy("aggregation").mean("spotPrice").sort("aggregation")
+    df.show()
+
+    /*
     // narrow down dataset for regression
     df.registerTempTable("data")
     df = sqlContext.sql("SELECT unixTime, spotPrice, priceChange, increase FROM data WHERE availabilityZone = 'ap-southeast-1b' AND instanceType= 'm1.medium'")
@@ -190,6 +227,8 @@ object ScalaApp {
     //lrModel.setThreshold(bestThreshold)
 
     println(s"Coefficients: ${lrModel.coefficients} Intercept: ${lrModel.intercept}")
+    *
+    */
 
   }
 }
