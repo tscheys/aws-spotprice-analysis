@@ -59,14 +59,14 @@ object ScalaApp {
 
     // create binary for weekday/weekend
     def isWeekDay = udf((date: String) => {
-      val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
+      val fmt = DateTimeFormat.forPattern("yy-MM-dd")
       val dt = fmt.parseDateTime(date)
       if(dt.getDayOfWeek < 6) {1} else {0}
     })
 
     // get day of week
     def dayOfWeek = udf((date: String) => {
-      val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
+      val fmt = DateTimeFormat.forPattern("yy-MM-dd")
       val dt = fmt.parseDateTime(date)
       dt.getDayOfWeek
     })
@@ -100,44 +100,36 @@ object ScalaApp {
     // create time variables
     df = df
       .withColumn("date", substring(col("timeStamp"), 0, 10))
-      //.withColumn("time", substring(col("timeStamp"), 12,8))
       .withColumn("hours", substring(col("timeStamp"), 12,2).cast("Int"))
       .withColumn("minutes", substring(col("timeStamp"), 15,2).cast("Int"))
-      //.withColumn("seconds", substring(col("timeStamp"), 18,2).cast("Int"))
-      //.withColumn("unixTime", unix_timestamp(concat_ws(" ", col("date"), col("time"))))
-      //.withColumn("isDaytime", dayTime(col("hours")))
-
-    //df = df
-    //  .withColumn("isWeekDay", isWeekDay(col("date")))
-    //  .withColumn("dayOfWeek", dayOfWeek(col("date")))
-
-    //df = df
-    //  .withColumn("SecondsDay", getSeconds(col("hours"), col("minutes"), col("seconds")))
 
     // aggregate data (interpolation)
 
     df = df.withColumn("aggregation", combine(col("date"), col("hours"), col("minutes")).cast("Double"))
 
-        // aggregation solved
+    // aggregation solved
     df = df
       .groupBy("availabilityZone", "instanceType","aggregation").mean("spotPrice").sort("availabilityZone", "instanceType", "aggregation")
     df = df
       .withColumnRenamed("avg(spotPrice)", "spotPrice")
-    df.show()
+
+    // create separate time variables
+    df = df
+      .withColumn("hours", substring(col("aggregation").cast("String"), 10, 2).cast("Int"))
+      .withColumn("quarter", substring(col("aggregation").cast("String"), 12, 1).cast("Int"))
+      .withColumn("date", concat_ws("-", substring(col("aggregation"), 4,2), substring(col("aggregation"), 6, 2), substring(col("aggregation"), 8, 2)))
+
+    // create aggregation variable (average spot price over every 15 minutes)
+
+    df = df
+      .withColumn("isWeekDay", isWeekDay(col("date")))
+      .withColumn("isDaytime", dayTime(col("hours")))
 
     // make sure changes to columns are correct
     df.show()
     df.printSchema()
 
-    // create aggregation variable (average spot price over every 15 minutes)
-
-    // length of strings is not the same
-    // field is not of integer type
-    // date is not split up properly
-    /*
-    // create lagged (t-1) spot price variable
     df.registerTempTable("cleanData")
-
     // use Spark window function to lag()
     df = sqlContext.sql("SELECT a.*, lag(a.spotPrice) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS previousPrice FROM cleanData a")
 
@@ -230,6 +222,5 @@ object ScalaApp {
     //lrModel.setThreshold(bestThreshold)
 
     println(s"Coefficients: ${lrModel.coefficients} Intercept: ${lrModel.intercept}")
-  */
   }
 }
