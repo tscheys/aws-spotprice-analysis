@@ -133,10 +133,6 @@ object ScalaApp {
     // use Spark window function to lag()
     df = sqlContext.sql("SELECT a.*, lag(a.spotPrice) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS previousPrice FROM cleanData a")
 
-    // check if lag() was done correctly
-    df.show(400)
-    df.printSchema()
-
     // subtract function
     def subtract = udf((price1: Double, price2: Double) => {
       price1 - price2
@@ -156,12 +152,19 @@ object ScalaApp {
 
     df = df
       .withColumn("priceChange", subtract(col("spotPrice"), col("previousPrice")))
-      .withColumn("increase", hasIncrease(col("priceChange")).cast("Double"))
+      .withColumn("increaseTemp", hasIncrease(col("priceChange")).cast("Double"))
       .withColumn("decrease", hasDecrease(col("priceChange")).cast("Double"))
+    df.registerTempTable("labelData")
+    df = sqlContext.sql("SELECT a.*, lead(a.increaseTemp) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS increase FROM labelData a")
+    // check if lag() was done correctly
+    df.show(400)
+    df.printSchema()
 
     //narrow down dataset for regression
     // test drive on asia, m1 medium
+
     df.registerTempTable("data")
+
     df = sqlContext.sql("SELECT spotPrice, priceChange, hours, quarter, isWeekDay, isDaytime, increase FROM data WHERE availabilityZone = 'ap-southeast-1b' AND instanceType= 'm1.medium'")
 
     // impute na's
@@ -200,7 +203,7 @@ object ScalaApp {
     val rf = new RandomForestClassifier()
       .setLabelCol("indexedLabel")
       .setFeaturesCol("indexedFeatures")
-      .setNumTrees(10)
+      .setNumTrees(100)
 
     // Convert indexed labels back to original labels.
     val labelConverter = new IndexToString()
@@ -214,12 +217,12 @@ object ScalaApp {
 
     // Train model.  This also runs the indexers.
     val model = pipeline.fit(train)
-
+    //model.save("/Users/tscheys/ScalaApp")
     // Make predictions.
     val predictions = model.transform(test)
 
     // Select example rows to display.
-    predictions.select("predictedLabel", "label", "features").show(5)
+    predictions.select("predictedLabel", "label", "features").show(100)
 
     // Select (prediction, true label) and compute test error
     val evaluator = new MulticlassClassificationEvaluator()
@@ -230,7 +233,7 @@ object ScalaApp {
     println("Test Error = " + (1.0 - accuracy))
 
     val rfModel = model.stages(2).asInstanceOf[RandomForestClassificationModel]
-    println("Learned classification forest model:\n" + rfModel.toDebugString)
+    //println("Learned classification forest model:\n" + rfModel.toDebugString)
 
   }
 }
