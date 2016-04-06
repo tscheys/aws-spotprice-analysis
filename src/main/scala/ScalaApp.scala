@@ -213,10 +213,10 @@ object ScalaApp {
       .setStages(Array(labelIndexer, featureIndexer, rf, labelConverter))
 
     // Train model.  This also runs the indexers.
-    val model = pipeline.fit(trainingData)
+    val model = pipeline.fit(train)
 
     // Make predictions.
-    val predictions = model.transform(testData)
+    val predictions = model.transform(test)
 
     // Select example rows to display.
     predictions.select("predictedLabel", "label", "features").show(5)
