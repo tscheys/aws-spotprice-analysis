@@ -159,15 +159,16 @@ object ScalaApp {
       .withColumn("increase", hasIncrease(col("priceChange")).cast("Double"))
       .withColumn("decrease", hasDecrease(col("priceChange")).cast("Double"))
 
-    // narrow down dataset for regression
-    //df.registerTempTable("data")
-    //df = sqlContext.sql("SELECT unixTime, spotPrice, priceChange, increase FROM data WHERE availabilityZone = 'ap-southeast-1b' AND instanceType= 'm1.medium'")
+    //narrow down dataset for regression
+    // test drive on asia, m1 medium
+    df.registerTempTable("data")
+    df = sqlContext.sql("SELECT spotPrice, priceChange, hours, quarter, isWeekDay, isDaytime, increase FROM data WHERE availabilityZone = 'ap-southeast-1b' AND instanceType= 'm1.medium'")
 
     // impute na's
     df = df.na.fill(0.0, Seq("priceChange", "increase"))
 
     val assembler = new VectorAssembler()
-      .setInputCols(Array("aggregation", "spotPrice", "priceChange"))
+      .setInputCols(Array("spotPrice", "priceChange", "hours", "quarter", "isWeekDay", "isDaytime"))
       .setOutputCol("features")
     // convert increase to binary variable
     val binarizer: Binarizer = new Binarizer()
@@ -180,7 +181,7 @@ object ScalaApp {
     df = binarizer.transform(df)
     df = df.select("features", "label")
 
-    df.show()
+    df.show(100, false)
 
     val Array(train, validation, test) = df.randomSplit(Array(0.8,0.2,0.2))
 
