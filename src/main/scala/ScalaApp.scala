@@ -176,52 +176,61 @@ object ScalaApp {
       .setOutputCol("label")
       .setThreshold(0.5)
 
-    // prepare variables for logit
+    // prepare variables for random forest
     df = assembler.transform(df)
     df = binarizer.transform(df)
     df = df.select("features", "label")
 
-    df.show(100, false)
+    val labelIndexer = new StringIndexer()
+      .setInputCol("label")
+      .setOutputCol("indexedLabel")
+      .fit(df)
+    // Automatically identify categorical features, and index them.
+    // Set maxCategories so features with > 4 distinct values are treated as continuous.
+    val featureIndexer = new VectorIndexer()
+      .setInputCol("features")
+      .setOutputCol("indexedFeatures")
+      .setMaxCategories(4)
+      .fit(df)
 
-    val Array(train, validation, test) = df.randomSplit(Array(0.8,0.2,0.2))
+    // Split the data into training and test sets (30% held out for testing)
+    val Array(train, test) = df.randomSplit(Array(0.7, 0.3))
 
-    // check if split worked
+    // Train a RandomForest model.
+    val rf = new RandomForestClassifier()
+      .setLabelCol("indexedLabel")
+      .setFeaturesCol("indexedFeatures")
+      .setNumTrees(10)
 
-    //train.show()
+    // Convert indexed labels back to original labels.
+    val labelConverter = new IndexToString()
+      .setInputCol("prediction")
+      .setOutputCol("predictedLabel")
+      .setLabels(labelIndexer.labels)
 
-    // do logistic regression
+    // Chain indexers and forest in a Pipeline
+    val pipeline = new Pipeline()
+      .setStages(Array(labelIndexer, featureIndexer, rf, labelConverter))
 
-    val lr = new LogisticRegression()
-      .setMaxIter(10)
-      .setRegParam(0.3)
-      .setElasticNetParam(0.8)
+    // Train model.  This also runs the indexers.
+    val model = pipeline.fit(trainingData)
 
-    // Fit the model
-    val lrModel = lr.fit(train)
+    // Make predictions.
+    val predictions = model.transform(testData)
 
-    val trainingSummary = lrModel.summary
+    // Select example rows to display.
+    predictions.select("predictedLabel", "label", "features").show(5)
 
-    // Obtain the objective per iteration.
-    val objectiveHistory = trainingSummary.objectiveHistory
-    objectiveHistory.foreach(loss => println(loss))
+    // Select (prediction, true label) and compute test error
+    val evaluator = new MulticlassClassificationEvaluator()
+      .setLabelCol("indexedLabel")
+      .setPredictionCol("prediction")
+      .setMetricName("precision")
+    val accuracy = evaluator.evaluate(predictions)
+    println("Test Error = " + (1.0 - accuracy))
 
-    // Obtain the metrics useful to judge performance on test data.
-    // We cast the summary to a BinaryLogisticRegressionSummary since the problem is a
-    // binary classification problem.
-    val binarySummary = trainingSummary.asInstanceOf[BinaryLogisticRegressionSummary]
+    val rfModel = model.stages(2).asInstanceOf[RandomForestClassificationModel]
+    println("Learned classification forest model:\n" + rfModel.toDebugString)
 
-    // Obtain the receiver-operating characteristic as a dataframe and areaUnderROC.
-    val roc = binarySummary.roc
-    roc.show()
-    println(binarySummary.areaUnderROC)
-
-    // Set the model threshold to maximize F-Measure
-    val fMeasure = binarySummary.fMeasureByThreshold
-    //val maxFMeasure = fMeasure.select(max("F-Measure")).head().getDouble(0)
-    //val bestThreshold = fMeasure.where($"F-Measure" === maxFMeasure)
-    //  .select("threshold").head().getDouble(0)
-    //lrModel.setThreshold(bestThreshold)
-
-    println(s"Coefficients: ${lrModel.coefficients} Intercept: ${lrModel.intercept}")
   }
 }
