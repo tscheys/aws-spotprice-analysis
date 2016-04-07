@@ -203,7 +203,7 @@ object ScalaApp {
     val rf = new RandomForestClassifier()
       .setLabelCol("indexedLabel")
       .setFeaturesCol("indexedFeatures")
-      .setNumTrees(100)
+      .setNumTrees(400)
 
     // Convert indexed labels back to original labels.
     val labelConverter = new IndexToString()
