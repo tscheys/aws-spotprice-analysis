@@ -131,6 +131,31 @@ object ScalaApp {
       .withColumn("isWeekDay", isWeekDay(col("date")))
       .withColumn("isDaytime", dayTime(col("hours")))
 
+    // create variable for irrational behaviour
+
+    def isIrrational = udf((region: String, instance: String, price: Double) => {
+
+      // remove subregion reference a, b, c
+      region.dropRight(1)
+
+      // check if spot price >= on-demand price
+      if(region == "eu-west-1" || region == "us-west-2") {
+        if(instance == "m1.medium" && price >= 0.095) 1
+        else if(instance == "c3.large" && price >= 0.12) 1
+        else if(instance == "g2.2xlarge" && price >= 0.702) 1
+        else 0
+      } else if(region == "ap-southeast-1") {
+        if(instance == "m1.medium" && price >= 0.117) 1
+        else if(instance == "c3.large" && price >= 0.132) 1
+        else if(instance == "g2.2xlarge" && price >= 1) 1
+        else 0
+      }
+
+    })
+
+    df = df
+      .withColumn("isIrrational", isIrrational(col("availabilityZone"), col("instanceType"), col("spotPrice")))
+
     // make sure changes to columns are correct
     df.show()
     df.printSchema()
