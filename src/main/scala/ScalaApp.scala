@@ -30,6 +30,12 @@ import org.apache.spark.ml.classification.LogisticRegression
 
 import org.apache.spark.ml.classification.{BinaryLogisticRegressionSummary, LogisticRegression}
 
+// import rf regression
+import org.apache.spark.ml.Pipeline
+import org.apache.spark.ml.evaluation.RegressionEvaluator
+import org.apache.spark.ml.feature.VectorIndexer
+import org.apache.spark.ml.regression.{RandomForestRegressionModel, RandomForestRegressor}
+
 // main class
 object ScalaApp {
   def main(args: Array[String]) {
@@ -155,7 +161,8 @@ object ScalaApp {
       .withColumn("increaseTemp", hasIncrease(col("priceChange")).cast("Double"))
       .withColumn("decrease", hasDecrease(col("priceChange")).cast("Double"))
     df.registerTempTable("labelData")
-    df = sqlContext.sql("SELECT a.*, lead(a.increaseTemp) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS increase FROM labelData a")
+    df = sqlContext.sql("SELECT a.*, lead(a.increaseTemp) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS increase, lead(a.spotPrice) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS futurePrice FROM labelData a")
+
     // check if lag() was done correctly
     df.show(400)
     df.printSchema()
@@ -165,11 +172,12 @@ object ScalaApp {
 
     df.registerTempTable("data")
 
-    df = sqlContext.sql("SELECT spotPrice, priceChange, hours, quarter, isWeekDay, isDaytime, increase FROM data WHERE availabilityZone = 'ap-southeast-1b' AND instanceType= 'm1.medium'")
+    df = sqlContext.sql("SELECT spotPrice, priceChange, hours, quarter, isWeekDay, isDaytime, increase, futurePrice FROM data WHERE availabilityZone = 'ap-southeast-1b' AND instanceType= 'm1.medium'")
 
     // impute na's
-    df = df.na.fill(0.0, Seq("priceChange", "increase"))
+    df = df.na.fill(0.0, Seq("priceChange", "increase", "futurePrice"))
 
+    /* START RF CLASSIFIER
     val assembler = new VectorAssembler()
       .setInputCols(Array("spotPrice", "priceChange", "hours", "quarter", "isWeekDay", "isDaytime"))
       .setOutputCol("features")
@@ -234,6 +242,50 @@ object ScalaApp {
 
     val rfModel = model.stages(2).asInstanceOf[RandomForestClassificationModel]
     //println("Learned classification forest model:\n" + rfModel.toDebugString)
+    */
+    val assembler = new VectorAssembler()
+      .setInputCols(Array("spotPrice", "priceChange", "hours", "quarter", "isWeekDay", "isDaytime"))
+      .setOutputCol("features")
 
+    // prepare variables for random forest
+    df = assembler.transform(df)
+
+    val featureIndexer = new VectorIndexer()
+      .setInputCol("features")
+      .setOutputCol("indexedFeatures")
+      .setMaxCategories(4)
+      .fit(df)
+
+    // Split the data into training and test sets (30% held out for testing)
+    val Array(trainingData, testData) = df.randomSplit(Array(0.7, 0.3))
+
+    // Train a RandomForest model.
+    val rf = new RandomForestRegressor()
+      .setLabelCol("futurePrice")
+      .setFeaturesCol("indexedFeatures")
+
+    // Chain indexer and forest in a Pipeline
+    val pipeline = new Pipeline()
+      .setStages(Array(featureIndexer, rf))
+
+    // Train model.  This also runs the indexer.
+    val model = pipeline.fit(trainingData)
+
+    // Make predictions.
+    val predictions = model.transform(testData)
+
+    // Select example rows to display.
+    predictions.select("prediction", "futurePrice", "features").show(40)
+
+    // Select (prediction, true label) and compute test error
+    val evaluator = new RegressionEvaluator()
+      .setLabelCol("futurePrice")
+      .setPredictionCol("prediction")
+      .setMetricName("rmse")
+    val rmse = evaluator.evaluate(predictions)
+    println("Root Mean Squared Error (RMSE) on test data = " + rmse)
+
+    val rfModel = model.stages(1).asInstanceOf[RandomForestRegressionModel]
+    //println("Learned regression forest model:\n" + rfModel.toDebugString)
   }
 }
