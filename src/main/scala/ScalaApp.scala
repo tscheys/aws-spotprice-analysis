@@ -199,14 +199,17 @@ object ScalaApp {
     df.show(400)
     df.printSchema()
 
-    //narrow down dataset for regression
+    var deviations = df.groupBy("availabilityZone", "instanceType", "date").agg(stddev("spotPrice"))
+    deviations.show()
+
+    // narrow down dataset for regression
     // test drive on asia, m1 medium
 
-    df.registerTempTable("data")
+    //df.registerTempTable("data")
 
-    df = sqlContext.sql("SELECT spotPrice, priceChange, hours, quarter, isWeekDay, isDaytime, increase, futurePrice FROM data WHERE availabilityZone = 'ap-southeast-1b' AND instanceType= 'm1.medium'")
+    //df = sqlContext.sql("SELECT spotPrice, priceChange, hours, quarter, isWeekDay, isDaytime, increase, futurePrice FROM data WHERE availabilityZone = 'ap-southeast-1b' AND instanceType= 'm1.medium'")
 
     // impute na's
-    df = df.na.fill(0.0, Seq("priceChange", "increase", "futurePrice"))
+    //df = df.na.fill(0.0, Seq("priceChange", "increase", "futurePrice"))
   }
 }
