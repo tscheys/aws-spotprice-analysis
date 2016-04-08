@@ -200,6 +200,14 @@ object ScalaApp {
     df.printSchema()
 
     var deviations = df.groupBy("availabilityZone", "instanceType", "date").agg(stddev("spotPrice"))
+    deviations = deviations
+      .withColumnRenamed("stddev_samp(spotPrice,0,0)", "stddev")
+
+    // calculate average of stddev
+    var average = deviations.na.drop().select(avg("stddev")).head().getDouble(0)
+    println(average)
+    // fill average when deviation was NaN
+    deviations = deviations.na.fill(average, Seq("stddev_samp(spotPrice,0,0)"))
     deviations.show()
 
     // narrow down dataset for regression
