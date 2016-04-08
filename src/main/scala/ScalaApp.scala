@@ -83,26 +83,27 @@ object ScalaApp {
 
     def combine(split: Int) = udf((date:String, hours: Int, minutes: Int) => {
       // initialize variable to be re-assigned a value in pattern matching
-      var minute = 0
+      var group = 0
 
       split match {
         // split the data every 15, 30 or 60 minutes
         case 15 => minutes match {
           // reassign all minutes to one specific minute in one of 4 quarters, so they can later be grouped
-          case x if x < 15 => minute = 10
-          case x if x >= 15 && x < 30 => minute = 20
-          case x if x >= 30 && x < 45 => minute = 40
-          case x => minute = 50
+          case x if x < 15 => group = 1
+          case x if x >= 15 && x < 30 => group = 2
+          case x if x >= 30 && x < 45 => group = 3
+          case x => group = 4
           }
         case 30 => minutes match {
-          case x if x < 30 => minute = 15
-          case x if x >= 30 => minute = 45
+          case x if x < 30 => group = 1
+          case x if x >= 30 => group = 2
         }
-        case 60 => minute = 30
+        case 60 => group = 1
       }
 
       // create string ready for unix_timestamp conversion
-      date + " " + hours + ":" + minute + ":" + "00"
+      // minutes in this unix are meaningless, since we use the group variable to perform a .groupby().mean("spotPrice") on the aggregation column
+      date + " " + hours + ":" + group + ":" + "00"
 
     })
 
@@ -115,8 +116,10 @@ object ScalaApp {
     // aggregate data (interpolation)
 
     df = df.withColumn("aggregation", unix_timestamp(combine(15)(col("date"), col("hours"), col("minutes"))))
-    df.show()
-/*
+
+    // do quick check if aggregation is properly able to form groups
+    df.orderBy("availabilityZone", "instanceType", "aggregation").show()
+
     // take mean over fixed time interval chosen in combine() function
     df = df
       .groupBy("availabilityZone", "instanceType","aggregation").mean("spotPrice").sort("availabilityZone", "instanceType", "aggregation")
@@ -250,6 +253,5 @@ FROM cleanData a""")
 
     //df = sqlContext.sql("SELECT spotPrice, priceChange, hours, quarter, isWeekDay, isDaytime, increase, futurePrice FROM data WHERE availabilityZone = 'ap-southeast-1b' AND instanceType= 'm1.medium'")
 
-     */
   }
 }
