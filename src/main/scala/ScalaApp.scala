@@ -65,14 +65,14 @@ object ScalaApp {
 
     // create binary for weekday/weekend
     def isWeekDay = udf((date: String) => {
-      val fmt = DateTimeFormat.forPattern("yy-MM-dd")
+      val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
       val dt = fmt.parseDateTime(date)
       if(dt.getDayOfWeek < 6) {1} else {0}
     })
 
     // get day of week
     def dayOfWeek = udf((date: String) => {
-      val fmt = DateTimeFormat.forPattern("yy-MM-dd")
+      val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
       val dt = fmt.parseDateTime(date)
       dt.getDayOfWeek
     })
@@ -127,13 +127,16 @@ object ScalaApp {
       .withColumnRenamed("avg(spotPrice)", "spotPrice")
 
     // create separate time variables
+    // 1970-01-01 00:00:00
     df = df
-      .withColumn("hours", substring(col("aggregation").cast("String"), 10, 2).cast("Int"))
-      .withColumn("quarter", substring(col("aggregation").cast("String"), 12, 1).cast("Int"))
-      .withColumn("date", concat_ws("-", substring(col("aggregation"), 4,2), substring(col("aggregation"), 6, 2), substring(col("aggregation"), 8, 2)))
+      .withColumn("timestamp", from_unixtime(col("aggregation")))
+      .withColumn("hours", substring(col("timestamp"), 12, 2).cast("Int"))
+      .withColumn("quarter", substring(col("timestamp"), 16, 1).cast("Int"))
+      .withColumn("date", substring(col("timestamp"), 1, 10))
+    df.show()
 
     // create aggregation variable (average spot price over every 15 minutes)
-
+    /*
     df = df
       .withColumn("isWeekDay", isWeekDay(col("date")))
       .withColumn("isDaytime", dayTime(col("hours")))
@@ -252,6 +255,6 @@ FROM cleanData a""")
     //df.registerTempTable("data")
 
     //df = sqlContext.sql("SELECT spotPrice, priceChange, hours, quarter, isWeekDay, isDaytime, increase, futurePrice FROM data WHERE availabilityZone = 'ap-southeast-1b' AND instanceType= 'm1.medium'")
-
+*/
   }
 }
