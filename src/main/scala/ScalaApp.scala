@@ -81,25 +81,19 @@ object ScalaApp {
       hours * 3600 + minutes * 60 + seconds
     })
 
-    def combine = udf((a:String, b: Int, c: Int) => {
+    def combine(split: Int) = udf((date:String, hours: Int, minutes: Int) => {
       // this function is really bad TODO rewrite!
-      var a1 = a.replace("-","")
-      var d = 0
 
-      if(b < 10) {
-        a1 = a1.concat("0")
+      var quarter = 0
+       // reassign all minutes to one specific minute in one of 4 quarters, so they can later be grouped
+      minutes match {
+        case x if x < 15 => quarter = 10
+        case x if x >= 15 && x < 30 => quarter = 20
+        case x if x >= 30 && x < 45 => quarter = 40
+        case x => quarter = 50
       }
-      if(c < 15) {
-        d = 1
-      } else if(c >= 15 && c < 30) {
-        d = 2
-      } else if(c >= 30 && c < 45) {
-        d = 3
-      } else {
-        d = 4
-      }
-
-      a1 + b + d
+      // create string ready for unix_timestamp conversion
+      date + " " + hours + ":" + quarter + ":" + "00"
 
     })
 
@@ -111,9 +105,9 @@ object ScalaApp {
 
     // aggregate data (interpolation)
 
-    df = df.withColumn("aggregation", combine(col("date"), col("hours"), col("minutes")).cast("Double"))
+    df = df.withColumn("aggregation", unix_timestamp(combine(15)(col("date"), col("hours"), col("minutes"))))
 
-    // aggregation solved
+    // take mean over fixed time interval chosen in combine() function
     df = df
       .groupBy("availabilityZone", "instanceType","aggregation").mean("spotPrice").sort("availabilityZone", "instanceType", "aggregation")
     df = df
@@ -238,13 +232,14 @@ FROM cleanData a""")
     var volatileFreq = df.groupBy("isVolatile").count()
     volatileFreq.show()
 
+    // check final basetable
     df.orderBy("availabilityZone", "instanceType", "aggregation").show(400)
     df.printSchema()
-    // narrow down dataset for regression
-    // test drive on asia, m1 medium
 
     //df.registerTempTable("data")
 
     //df = sqlContext.sql("SELECT spotPrice, priceChange, hours, quarter, isWeekDay, isDaytime, increase, futurePrice FROM data WHERE availabilityZone = 'ap-southeast-1b' AND instanceType= 'm1.medium'")
+
+     */
   }
 }
