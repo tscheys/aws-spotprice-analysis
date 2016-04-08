@@ -169,7 +169,11 @@ object ScalaApp {
 
     df.registerTempTable("cleanData")
     // use Spark window function to lag()
-    df = sqlContext.sql("SELECT a.*, lag(a.spotPrice) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS previousPrice FROM cleanData a")
+    df = sqlContext.sql("""SELECT a.*,
+                        lag(a.spotPrice) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS t1
+                        lag(a.spotPrice) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS t2
+                        lag(a.spotPrice) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS t3
+                        FROM cleanData a""")
 
     // subtract function
     def subtract = udf((price1: Double, price2: Double) => {
@@ -189,7 +193,7 @@ object ScalaApp {
     // subtract current spot price from previous spot price to get priceChange column
 
     df = df
-      .withColumn("priceChange", subtract(col("spotPrice"), col("previousPrice")))
+      .withColumn("priceChange", subtract(col("spotPrice"), col("t1")))
       .withColumn("increaseTemp", hasIncrease(col("priceChange")).cast("Double"))
       .withColumn("decrease", hasDecrease(col("priceChange")).cast("Double"))
     df.registerTempTable("labelData")
@@ -228,6 +232,9 @@ object ScalaApp {
     df.show()
     df.printSchema()
 
+    // impute na's
+    df = df.na.fill(0.0, Seq("priceChange", "increase", "futurePrice"))
+
     // check frequency of volatility
     var volatileFreq = df.groupBy("isVolatile").count()
     volatileFreq.show()
@@ -238,8 +245,5 @@ object ScalaApp {
     //df.registerTempTable("data")
 
     //df = sqlContext.sql("SELECT spotPrice, priceChange, hours, quarter, isWeekDay, isDaytime, increase, futurePrice FROM data WHERE availabilityZone = 'ap-southeast-1b' AND instanceType= 'm1.medium'")
-
-    // impute na's
-    //df = df.na.fill(0.0, Seq("priceChange", "increase", "futurePrice"))
   }
 }
