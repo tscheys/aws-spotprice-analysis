@@ -136,7 +136,7 @@ object ScalaApp {
     df.show()
 
     // create aggregation variable (average spot price over every 15 minutes)
-    /*
+
     df = df
       .withColumn("isWeekDay", isWeekDay(col("date")))
       .withColumn("isDaytime", dayTime(col("hours")))
@@ -255,6 +255,6 @@ FROM cleanData a""")
     //df.registerTempTable("data")
 
     //df = sqlContext.sql("SELECT spotPrice, priceChange, hours, quarter, isWeekDay, isDaytime, increase, futurePrice FROM data WHERE availabilityZone = 'ap-southeast-1b' AND instanceType= 'm1.medium'")
-*/
+
   }
 }
