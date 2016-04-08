@@ -170,10 +170,10 @@ object ScalaApp {
     df.registerTempTable("cleanData")
     // use Spark window function to lag()
     df = sqlContext.sql("""SELECT a.*,
-                        lag(a.spotPrice) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS t1
-                        lag(a.spotPrice) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS t2
-                        lag(a.spotPrice) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS t3
-                        FROM cleanData a""")
+lag(a.spotPrice) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS t1,
+lag(a.spotPrice, 2) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS t2,
+lag(a.spotPrice, 3) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS t3
+FROM cleanData a""")
 
     // subtract function
     def subtract = udf((price1: Double, price2: Double) => {
@@ -194,6 +194,8 @@ object ScalaApp {
 
     df = df
       .withColumn("priceChange", subtract(col("spotPrice"), col("t1")))
+      .withColumn("priceChangeLag1", subtract(col("t1"), col("t2")))
+      .withColumn("priceChangeLag2", subtract(col("t2"), col("t3")))
       .withColumn("increaseTemp", hasIncrease(col("priceChange")).cast("Double"))
       .withColumn("decrease", hasDecrease(col("priceChange")).cast("Double"))
     df.registerTempTable("labelData")
@@ -229,9 +231,6 @@ object ScalaApp {
     df = df
       .withColumn("isVolatile", isVolatile(col("priceChange"), col("stddev")))
 
-    df.show()
-    df.printSchema()
-
     // impute na's
     df = df.na.fill(0.0, Seq("priceChange", "increase", "futurePrice"))
 
@@ -239,6 +238,8 @@ object ScalaApp {
     var volatileFreq = df.groupBy("isVolatile").count()
     volatileFreq.show()
 
+    df.orderBy("availabilityZone", "instanceType", "aggregation").show(400)
+    df.printSchema()
     // narrow down dataset for regression
     // test drive on asia, m1 medium
 
