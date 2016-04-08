@@ -158,9 +158,11 @@ object ScalaApp {
     // check frequency of irrational behaviour
     df.printSchema()
     df.show()
+
+    // check if isIrration() worked
     println(df.stat.freqItems(Seq("isIrrational")).show())
     //df.show(100)
-    /*
+
     // make sure changes to columns are correct
     df.show()
     df.printSchema()
@@ -207,8 +209,8 @@ object ScalaApp {
     // impute na's
     df = df.na.fill(0.0, Seq("priceChange", "increase", "futurePrice"))
 
-    /* START RF CLASSIFIER
-    val assembler = new VectorAssembler()
+    //START RF CLASSIFIER
+    /*val assembler = new VectorAssembler()
       .setInputCols(Array("spotPrice", "priceChange", "hours", "quarter", "isWeekDay", "isDaytime"))
       .setOutputCol("features")
     // convert increase to binary variable
@@ -317,6 +319,5 @@ object ScalaApp {
 
     val rfModel = model.stages(1).asInstanceOf[RandomForestRegressionModel]
     //println("Learned regression forest model:\n" + rfModel.toDebugString)
-    */
   }
 }
