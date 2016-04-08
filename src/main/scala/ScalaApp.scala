@@ -82,18 +82,27 @@ object ScalaApp {
     })
 
     def combine(split: Int) = udf((date:String, hours: Int, minutes: Int) => {
-      // this function is really bad TODO rewrite!
+      // initialize variable to be re-assigned a value in pattern matching
+      var minute = 0
 
-      var quarter = 0
-       // reassign all minutes to one specific minute in one of 4 quarters, so they can later be grouped
-      minutes match {
-        case x if x < 15 => quarter = 10
-        case x if x >= 15 && x < 30 => quarter = 20
-        case x if x >= 30 && x < 45 => quarter = 40
-        case x => quarter = 50
+      split match {
+        // split the data every 15, 30 or 60 minutes
+        case 15 => minutes match {
+          // reassign all minutes to one specific minute in one of 4 quarters, so they can later be grouped
+          case x if x < 15 => minute = 10
+          case x if x >= 15 && x < 30 => minute = 20
+          case x if x >= 30 && x < 45 => minute = 40
+          case x => minute = 50
+          }
+        case 30 => minutes match {
+          case x if x < 30 => minute = 15
+          case x if x >= 30 => minute = 45
+        }
+        case 60 => minute = 30
       }
+
       // create string ready for unix_timestamp conversion
-      date + " " + hours + ":" + quarter + ":" + "00"
+      date + " " + hours + ":" + minute + ":" + "00"
 
     })
 
@@ -106,7 +115,8 @@ object ScalaApp {
     // aggregate data (interpolation)
 
     df = df.withColumn("aggregation", unix_timestamp(combine(15)(col("date"), col("hours"), col("minutes"))))
-
+    df.show()
+/*
     // take mean over fixed time interval chosen in combine() function
     df = df
       .groupBy("availabilityZone", "instanceType","aggregation").mean("spotPrice").sort("availabilityZone", "instanceType", "aggregation")
