@@ -133,10 +133,10 @@ object ScalaApp {
 
     // create variable for irrational behaviour
 
-    def isIrrational = udf((region: String, instance: String, price: Double) => {
+    def isIrrational = udf((zone: String, instance: String, price: Double) => {
 
       // remove subregion reference a, b, c
-      region.dropRight(1)
+      val region  = zone.dropRight(1)
 
       // check if spot price >= on-demand price
       if(region == "eu-west-1" || region == "us-west-2") {
@@ -147,15 +147,20 @@ object ScalaApp {
       } else if(region == "ap-southeast-1") {
         if(instance == "m1.medium" && price >= 0.117) 1
         else if(instance == "c3.large" && price >= 0.132) 1
-        else if(instance == "g2.2xlarge" && price >= 1) 1
+        else if(instance == "g2.2xlarge" && price >= 1.00) 1
         else 0
       }
+      else 0
 
     })
-
     df = df
-      .withColumn("isIrrational", isIrrational(col("availabilityZone"), col("instanceType"), col("spotPrice")))
-
+      .withColumn("isIrrational", isIrrational(col("availabilityZone"), col("instanceType"), col("spotPrice")).cast("Integer"))
+    // check frequency of irrational behaviour
+    df.printSchema()
+    df.show()
+    println(df.stat.freqItems(Seq("isIrrational")).show())
+    //df.show(100)
+    /*
     // make sure changes to columns are correct
     df.show()
     df.printSchema()
@@ -312,5 +317,6 @@ object ScalaApp {
 
     val rfModel = model.stages(1).asInstanceOf[RandomForestRegressionModel]
     //println("Learned regression forest model:\n" + rfModel.toDebugString)
+    */
   }
 }
