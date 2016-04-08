@@ -199,16 +199,38 @@ object ScalaApp {
     df.show(400)
     df.printSchema()
 
-    var deviations = df.groupBy("availabilityZone", "instanceType", "date").agg(stddev("spotPrice"))
+    var deviations = df.groupBy("availabilityZone", "instanceType", "date").agg(stddev("priceChange"))
     deviations = deviations
-      .withColumnRenamed("stddev_samp(spotPrice,0,0)", "stddev")
+      .withColumnRenamed("stddev_samp(priceChange,0,0)", "stddev")
 
     // calculate average of stddev
-    var average = deviations.na.drop().select(avg("stddev")).head().getDouble(0)
-    println(average)
+    var average = deviations.na.drop().select(avg("stddev")).head()
+    println(average + " " + average.getDouble(0))
     // fill average when deviation was NaN
-    deviations = deviations.na.fill(average, Seq("stddev_samp(spotPrice,0,0)"))
+    deviations = deviations.na.fill(average.getDouble(0), Seq("stddev"))
     deviations.show()
+
+    // join deviations and df
+    df = df
+      .join(deviations, Seq("availabilityZone", "instanceType", "date"))
+
+    def isVolatile = udf((priceChange: Double, stddev: Double) => {
+      if(priceChange > 2 * stddev) {
+        1
+      } else {
+        0
+      }
+    })
+
+    df = df
+      .withColumn("isVolatile", isVolatile(col("priceChange"), col("stddev")))
+
+    df.show()
+    df.printSchema()
+
+    // check frequency of volatility
+    var volatileFreq = df.groupBy("isVolatile").count()
+    volatileFreq.show()
 
     // narrow down dataset for regression
     // test drive on asia, m1 medium
