@@ -164,6 +164,9 @@ lag(a.spotPrice, 2) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER 
 lag(a.spotPrice, 3) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS t3
 FROM cleanData a""")
 
+    // some rows contain null values because we have shifted cols with window function
+    df = df.na.drop()
+
     // subtract function
     def subtract = udf((price1: Double, price2: Double) => {
       price1 - price2
@@ -190,6 +193,8 @@ FROM cleanData a""")
     df.registerTempTable("labelData")
     df = sqlContext.sql("SELECT a.*, lead(a.increaseTemp) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS increase, lead(a.spotPrice) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS futurePrice FROM labelData a")
 
+    // remove null rows created by performing a lead
+    df.na.drop()
     // check if lag() was done correctly
     df.show(400)
     df.printSchema()
@@ -221,7 +226,7 @@ FROM cleanData a""")
       .withColumn("isVolatile", isVolatile(col("priceChange"), col("stddev")))
 
     // impute na's
-    df = df.na.fill(0.0, Seq("priceChange", "increase", "futurePrice"))
+    df = df.na.fill(0.0, Seq("priceChange", "increase", "futurePrice", "isVolatile"))
 
     // check frequency of volatility
     var volatileFreq = df.groupBy("isVolatile").count()
