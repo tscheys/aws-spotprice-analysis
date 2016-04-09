@@ -23,7 +23,11 @@ object ScalaApp {
     val conf = new SparkConf().setAppName("SpotPriceAnalysis").setMaster("local[2]")
     val sc = new SparkContext(conf)
     val sqlContext = new org.apache.spark.sql.hive.HiveContext(sc)
-
+    val df = sqlContext.read
+      .format("com.databricks.spark.csv")
+      .option("header", "true") // Use first line of all files as header
+      .option("inferSchema", "true") // Automatically infer data types
+      .load("Users/tscheys/thesis-data/basetable.csv")
     // Statistics
 
     // datapoint per availabilityZone - instanceType pair
