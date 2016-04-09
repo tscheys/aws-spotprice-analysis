@@ -120,7 +120,9 @@ object ScalaApp {
         .withColumn("hours", substring(col("TimeStamp"), 12, 2).cast("Int"))
         .withColumn("quarter", substring(col("TimeStamp"), 16, 1).cast("Int"))
         .withColumn("date", substring(col("TimeStamp"), 1, 10))
-        .withColumn("isWeekDay", isWeekDay(col("date") <= 5))
+        df.show()
+      df = df
+        .withColumn("isWeekDay", (isWeekDay(col("date")) <= 5).cast("Int"))
         .withColumn("isDaytime", (col("hours") > 6 || col("hours") < 18).cast("Int"))
 
       df = df
