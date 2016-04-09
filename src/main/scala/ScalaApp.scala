@@ -117,7 +117,7 @@ object ScalaApp {
 
     df = df
       .withColumn("isWeekDay", isWeekDay(col("date")))
-      .withColumn("isDaytime", (col("hours") > 6 || col("hours") < 18).cast("Boolean"))
+      .withColumn("isDaytime", (col("hours") > 6 || col("hours") < 18).cast("Int"))
 
     df = df
       .withColumn("isIrrational", isIrrational(col("AvailabilityZone"), col("InstanceType"), col("spotPrice")).cast("Integer"))
@@ -150,9 +150,9 @@ object ScalaApp {
       .withColumn("priceChange", col("spotPrice") - col("t1"))
       .withColumn("priceChangeLag1", col("t1") - col("t2"))
       .withColumn("priceChangeLag2", col("t2") - col("t3"))
-      .withColumn("increaseTemp", (col("priceChange") > 0).cast("Boolean"))
-      .withColumn("decreaseTemp", (col("priceChange") < 0).cast("Boolean"))
-      .withColumn("sameTemp", (col("priceChange") === 0).cast("Boolean"))
+      .withColumn("increaseTemp", (col("priceChange") > 0).cast("Int"))
+      .withColumn("decreaseTemp", (col("priceChange") < 0).cast("Int"))
+      .withColumn("sameTemp", (col("priceChange") === 0).cast("Int"))
 
     df.registerTempTable("labelData")
     df = sqlContext.sql("""SELECT a.*, lead(a.increaseTemp) OVER (PARTITION BY a.AvailabilityZone, a.InstanceType ORDER BY a.aggregation) AS increase,
@@ -182,7 +182,7 @@ object ScalaApp {
       .join(deviations, Seq("AvailabilityZone", "InstanceType", "date"))
 
     df = df
-      .withColumn("isVolatile", col("priceChange") > (col("stddev") * 2))
+      .withColumn("isVolatile", (col("priceChange") > (col("stddev") * 2)).cast("Int"))
 
     // impute na's
     df = df.na.fill(0.0, Seq("priceChange", "increase", "futurePrice", "isVolatile"))
