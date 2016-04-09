@@ -7,9 +7,6 @@ import org.apache.spark.sql.hive._
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.DataFrame
 
-// import jodatime
-import com.github.nscala_time.time.Imports._
-
 // main class
 object ScalaApp {
   def main(args: Array[String]) {
@@ -33,9 +30,9 @@ object ScalaApp {
 
     // create binary for weekday/weekend
     def isWeekDay = udf((date: String) => {
-      val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
+      /*val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
       val dt = fmt.parseDateTime(date)
-      if(dt.getDayOfWeek < 6) {1} else {0}
+      if(dt.getDayOfWeek < 6) {1} else {0}*/
     })
 
     def aggregate(split: Int) = udf((date:String, hours: Int, minutes: Int) => {
