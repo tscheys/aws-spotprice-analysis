@@ -27,7 +27,7 @@ object ScalaApp {
     val C3_AP = 0.132
     val G2_AP = 1.00
 
-    val INTERVALS = Seq(15, 30, 45)
+    val INTERVALS = Seq(15, 30, 60)
 
     // HELPER FUNCTIONS
 
