@@ -36,12 +36,6 @@ object ScalaApp {
       .withColumnRenamed("ProductDescription", "productDescription")
       .withColumnRenamed("Timestamp", "timeStamp")
 
-       // create binary for day/night time
-    def dayTime = udf((hour: Integer) => {
-      if(hour >= 18 || hour <= 6) 0
-      else 1
-    })
-
     // create binary for weekday/weekend
     def isWeekDay = udf((date: String) => {
       val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
@@ -54,10 +48,6 @@ object ScalaApp {
       val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
       val dt = fmt.parseDateTime(date)
       dt.getDayOfWeek
-    })
-
-    def getSeconds = udf((hours: Integer, minutes: Integer, seconds: Integer) => {
-      hours * 3600 + minutes * 60 + seconds
     })
 
     def combine(split: Int) = udf((date:String, hours: Int, minutes: Int) => {
@@ -106,7 +96,6 @@ object ScalaApp {
       .withColumnRenamed("avg(spotPrice)", "spotPrice")
 
     // create separate time variables
-    // 1970-01-01 00:00:00
     df = df
       .withColumn("timestamp", from_unixtime(col("aggregation")))
       .withColumn("hours", substring(col("timestamp"), 12, 2).cast("Int"))
@@ -118,11 +107,12 @@ object ScalaApp {
 
     df = df
       .withColumn("isWeekDay", isWeekDay(col("date")))
-      .withColumn("isDaytime", dayTime(col("hours")))
+      .withColumn("isDaytime", (col("hours") > 6 || col("hours") < 18).cast("Boolean")
 
     // create variable for irrational behaviour
 
     def isIrrational = udf((zone: String, instance: String, price: Double) => {
+// TODO: rewrite this heaping pile of shit
 
       // remove subregion reference a, b, c
       val region  = zone.dropRight(1)
