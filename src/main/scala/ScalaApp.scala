@@ -36,5 +36,7 @@ object ScalaApp {
    .option("header", "true")
    .save("../thesis-data/obsPerCouple.csv")
 
+   df.printSchema()
+
   }
 }
