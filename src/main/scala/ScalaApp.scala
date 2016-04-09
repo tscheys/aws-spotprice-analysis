@@ -50,6 +50,10 @@ object ScalaApp {
    //DateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
   //Date date = new Date();
 
+    // check frequency of volatility
+    var volatileFreq = df.groupBy("isVolatile").count()
+    volatileFreq.show()
+
    //val f = new File("../thesis-data//someDir")
   }
 }
