@@ -32,11 +32,15 @@ object ScalaApp {
 
     // datapoint per availabilityZone - instanceType pair
     df.groupBy("availabilityZone", "instanceType").count.coalesce(1)
-   .write.format("com.databricks.spark.csv")
-   .option("header", "true")
-   .save("../thesis-data/obsPerCouple.csv")
+     .write.format("com.databricks.spark.csv")
+     .option("header", "true")
+     .save("../thesis-data/obsPerCouple.csv")
 
    df.printSchema()
 
+   df.groupBy("availabilityZone", "instanceType").agg("priceChange", "stddev").coalesce(1)
+     .write.format("com.databricks.spark.csv")
+     .option("header", "true")
+     .save("../thesis-data/volatility.csv")
   }
 }
