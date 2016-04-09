@@ -33,6 +33,7 @@ object ScalaApp {
       /*val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
       val dt = fmt.parseDateTime(date)
       if(dt.getDayOfWeek < 6) {1} else {0}*/
+      1
     })
 
     def aggregate(split: Int) = udf((date:String, hours: Int, minutes: Int) => {
