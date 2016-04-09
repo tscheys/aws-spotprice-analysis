@@ -16,6 +16,10 @@ import org.apache.spark.ml.feature.Binarizer
 import org.apache.spark.ml.feature.VectorIndexer
 // filewriter
 import java.io._
+import java.util.Date._
+import java.text.DateFormat._
+import java.text.SimpleDateFormat._
+import java.util.Calendar._
 
 // main class
 object ScalaApp {
@@ -37,10 +41,15 @@ object ScalaApp {
      .save("../thesis-data/obsPerCouple.csv")
 
    df.printSchema()
+   df.show()
 
-   df.groupBy("availabilityZone", "instanceType").agg("priceChange", "stddev").coalesce(1)
+   df.groupBy("availabilityZone", "instanceType").agg(stddev("priceChange")).coalesce(1)
      .write.format("com.databricks.spark.csv")
      .option("header", "true")
      .save("../thesis-data/volatility.csv")
+   //DateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
+  //Date date = new Date();
+
+   //val f = new File("../thesis-data//someDir")
   }
 }
