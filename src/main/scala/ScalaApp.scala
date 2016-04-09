@@ -205,10 +205,6 @@ object ScalaApp {
     // impute na's
     df = df.na.fill(0.0, Seq("priceChange", "increase", "futurePrice", "isVolatile"))
 
-    // check frequency of volatility
-    var volatileFreq = df.groupBy("isVolatile").count()
-    volatileFreq.show()
-
     // check final basetable
     df.orderBy("availabilityZone", "instanceType", "aggregation").show(400)
     df.printSchema()
