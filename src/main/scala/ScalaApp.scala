@@ -167,31 +167,20 @@ FROM cleanData a""")
     // some rows contain null values because we have shifted cols with window function
     df = df.na.drop()
 
-    // subtract function
-    def subtract = udf((price1: Double, price2: Double) => {
-      price1 - price2
-    })
-    // TODO: simplify these 2 functions
-    def hasIncrease = udf((change: Double) => {
-      if(change > 0) 1
-      else 0
-    })
-
-    def hasDecrease = udf((change: Double) => {
-      if(change < 0) 1
-      else 0
-    })
-
     // subtract current spot price from previous spot price to get priceChange column
 
     df = df
-      .withColumn("priceChange", subtract(col("spotPrice"), col("t1")))
-      .withColumn("priceChangeLag1", subtract(col("t1"), col("t2")))
-      .withColumn("priceChangeLag2", subtract(col("t2"), col("t3")))
-      .withColumn("increaseTemp", hasIncrease(col("priceChange")).cast("Double"))
-      .withColumn("decrease", hasDecrease(col("priceChange")).cast("Double"))
-    df.registerTempTable("labelData")
-    df = sqlContext.sql("SELECT a.*, lead(a.increaseTemp) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS increase, lead(a.spotPrice) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS futurePrice FROM labelData a")
+      .withColumn("priceChange", col("spotPrice") - col("t1"))
+      .withColumn("priceChangeLag1", col("t1") - col("t2"))
+      .withColumn("priceChangeLag2", col("t2") - col("t3"))
+      .withColumn("increaseTemp", (col("priceChange") > 0).cast("Boolean"))
+      .withColumn("decrease", (col("priceChange") < 0).cast("Boolean"))
+      .withColumn("same", (col("priceChange") === 0).cast("Boolean"))
+
+      df.registerTempTable("labelData")
+    df = sqlContext.sql("""SELECT a.*, lead(a.increaseTemp) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS increase,
+      lead(a.spotPrice) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation)
+      AS futurePrice FROM labelData a""")
 
     // remove null rows created by performing a lead
     df.na.drop()
