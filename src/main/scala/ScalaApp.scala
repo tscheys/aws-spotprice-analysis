@@ -5,6 +5,7 @@ import org.apache.spark.sql.functions._
 
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.DataFrame
 
 // import jodatime
 import com.github.nscala_time.time.Imports._
@@ -25,6 +26,8 @@ object ScalaApp {
     val M1_AP = 0.117
     val C3_AP = 0.132
     val G2_AP = 1.00
+
+    val INTERVALS = Seq(15, 30, 45)
 
     // HELPER FUNCTIONS
 
@@ -81,118 +84,123 @@ object ScalaApp {
       }
     })
 
-    // apply correct types to columns
-    // rename other columns to camelCase
-    df = df
-      .withColumn("SpotPrice", col("SpotPrice").cast("Double"))
+    // makes basetable for different time aggregation intervals
+    // we will call this function 3 times: for 15, 30 and 60 minutes
+    def basetableMaker = (data: DataFrame, interval: Int) => {
+      var df = data
+        .withColumn("SpotPrice", col("SpotPrice").cast("Double"))
 
-    // create time variables
-    df = df
-      .withColumn("date", substring(col("TimeStamp"), 0, 10))
-      .withColumn("hours", substring(col("TimeStamp"), 12,2).cast("Int"))
-      .withColumn("minutes", substring(col("TimeStamp"), 15,2).cast("Int"))
+      // create time variables
+      df = df
+        .withColumn("date", substring(col("TimeStamp"), 0, 10))
+        .withColumn("hours", substring(col("TimeStamp"), 12,2).cast("Int"))
+        .withColumn("minutes", substring(col("TimeStamp"), 15,2).cast("Int"))
 
-    // aggregate data (interpolation)
+      // aggregate data (interpolation)
 
-    df = df.withColumn("aggregation", unix_timestamp(aggregate(15)(col("date"), col("hours"), col("minutes"))))
+      df = df.withColumn("aggregation", unix_timestamp(aggregate(15)(col("date"), col("hours"), col("minutes"))))
 
-    // do quick check if aggregation is properly able to form groups
-    df.orderBy("AvailabilityZone", "InstanceType", "aggregation").show()
+      // do quick check if aggregation is properly able to form groups
+      df.orderBy("AvailabilityZone", "InstanceType", "aggregation").show()
 
-    // take mean over fixed time interval chosen in aggregate() function
-    df = df
-      .groupBy("AvailabilityZone", "InstanceType","aggregation").mean("spotPrice").sort("AvailabilityZone", "InstanceType", "aggregation")
-    df = df
-      .withColumnRenamed("avg(spotPrice)", "spotPrice")
+      // take mean over fixed time interval chosen in aggregate() function
+      df = df
+        .groupBy("AvailabilityZone", "InstanceType","aggregation").mean("spotPrice").sort("AvailabilityZone", "InstanceType", "aggregation")
+      df = df
+        .withColumnRenamed("avg(spotPrice)", "spotPrice")
 
-    // create separate time variables
-    df = df
-      .withColumn("TimeStamp", from_unixtime(col("aggregation")))
-      .withColumn("hours", substring(col("TimeStamp"), 12, 2).cast("Int"))
-      .withColumn("quarter", substring(col("TimeStamp"), 16, 1).cast("Int"))
-      .withColumn("date", substring(col("TimeStamp"), 1, 10))
-    df.show()
+      // create separate time variables
+      df = df
+        .withColumn("TimeStamp", from_unixtime(col("aggregation")))
+        .withColumn("hours", substring(col("TimeStamp"), 12, 2).cast("Int"))
+        .withColumn("quarter", substring(col("TimeStamp"), 16, 1).cast("Int"))
+        .withColumn("date", substring(col("TimeStamp"), 1, 10))
+      df.show()
 
-    // create aggregation variable (average spot price over every 15 minutes)
+      // create aggregation variable (average spot price over every 15 minutes)
 
-    df = df
-      .withColumn("isWeekDay", isWeekDay(col("date")))
-      .withColumn("isDaytime", (col("hours") > 6 || col("hours") < 18).cast("Int"))
+      df = df
+        .withColumn("isWeekDay", isWeekDay(col("date")))
+        .withColumn("isDaytime", (col("hours") > 6 || col("hours") < 18).cast("Int"))
 
-    df = df
-      .withColumn("isIrrational", isIrrational(col("AvailabilityZone"), col("InstanceType"), col("spotPrice")).cast("Integer"))
-    // check frequency of irrational behaviour
-    df.printSchema()
-    df.show()
+      df = df
+        .withColumn("isIrrational", isIrrational(col("AvailabilityZone"), col("InstanceType"), col("spotPrice")).cast("Integer"))
+      // check frequency of irrational behaviour
+      df.printSchema()
+      df.show()
 
-    // check if isIrration() worked
-    println(df.stat.freqItems(Seq("isIrrational")).show())
-    //df.show(100)
+      // check if isIrration() worked
+      println(df.stat.freqItems(Seq("isIrrational")).show())
+      //df.show(100)
 
-    // make sure changes to columns are correct
-    df.show()
-    df.printSchema()
+      // make sure changes to columns are correct
+      df.show()
+      df.printSchema()
 
-    df.registerTempTable("cleanData")
-    // use Spark window function to lag()
-    df = sqlContext.sql("""SELECT a.*,
-        lag(a.spotPrice) OVER (PARTITION BY a.AvailabilityZone, a.InstanceType ORDER BY a.aggregation) AS t1,
-        lag(a.spotPrice, 2) OVER (PARTITION BY a.AvailabilityZone, a.InstanceType ORDER BY a.aggregation) AS t2,
-        lag(a.spotPrice, 3) OVER (PARTITION BY a.AvailabilityZone, a.InstanceType ORDER BY a.aggregation) AS t3
-        FROM cleanData a""")
+      df.registerTempTable("cleanData")
+      // use Spark window function to lag()
+      df = sqlContext.sql("""SELECT a.*,
+          lag(a.spotPrice) OVER (PARTITION BY a.AvailabilityZone, a.InstanceType ORDER BY a.aggregation) AS t1,
+          lag(a.spotPrice, 2) OVER (PARTITION BY a.AvailabilityZone, a.InstanceType ORDER BY a.aggregation) AS t2,
+          lag(a.spotPrice, 3) OVER (PARTITION BY a.AvailabilityZone, a.InstanceType ORDER BY a.aggregation) AS t3
+          FROM cleanData a""")
 
-    // some rows contain null values because we have shifted cols with window function
-    df = df.na.drop()
+      // some rows contain null values because we have shifted cols with window function
+      df = df.na.drop()
 
-    // subtract current spot price from previous spot price to get priceChange column
+      // subtract current spot price from previous spot price to get priceChange column
 
-    df = df
-      .withColumn("priceChange", col("spotPrice") - col("t1"))
-      .withColumn("priceChangeLag1", col("t1") - col("t2"))
-      .withColumn("priceChangeLag2", col("t2") - col("t3"))
-      .withColumn("increaseTemp", (col("priceChange") > 0).cast("Int"))
-      .withColumn("decreaseTemp", (col("priceChange") < 0).cast("Int"))
-      .withColumn("sameTemp", (col("priceChange") === 0).cast("Int"))
+      df = df
+        .withColumn("priceChange", col("spotPrice") - col("t1"))
+        .withColumn("priceChangeLag1", col("t1") - col("t2"))
+        .withColumn("priceChangeLag2", col("t2") - col("t3"))
+        .withColumn("increaseTemp", (col("priceChange") > 0).cast("Int"))
+        .withColumn("decreaseTemp", (col("priceChange") < 0).cast("Int"))
+        .withColumn("sameTemp", (col("priceChange") === 0).cast("Int"))
 
-    df.registerTempTable("labelData")
-    df = sqlContext.sql("""SELECT a.*, lead(a.increaseTemp) OVER (PARTITION BY a.AvailabilityZone, a.InstanceType ORDER BY a.aggregation) AS increase,
-      lead(a.decreaseTemp) OVER (PARTITION BY a.AvailabilityZone, a.InstanceType ORDER BY a.aggregation) AS decrease,
-      lead(a.sameTemp) OVER (PARTITION BY a.AvailabilityZone, a.InstanceType ORDER BY a.aggregation) AS same,
-      lead(a.spotPrice) OVER (PARTITION BY a.AvailabilityZone, a.InstanceType ORDER BY a.aggregation) AS futurePrice
-      FROM labelData a""")
+      df.registerTempTable("labelData")
+      df = sqlContext.sql("""SELECT a.*, lead(a.increaseTemp) OVER (PARTITION BY a.AvailabilityZone, a.InstanceType ORDER BY a.aggregation) AS increase,
+        lead(a.decreaseTemp) OVER (PARTITION BY a.AvailabilityZone, a.InstanceType ORDER BY a.aggregation) AS decrease,
+        lead(a.sameTemp) OVER (PARTITION BY a.AvailabilityZone, a.InstanceType ORDER BY a.aggregation) AS same,
+        lead(a.spotPrice) OVER (PARTITION BY a.AvailabilityZone, a.InstanceType ORDER BY a.aggregation) AS futurePrice
+        FROM labelData a""")
 
-    // remove null rows created by performing a lead
-    df.na.drop()
-    // check if lag() was done correctly
-    df.show(400)
-    df.printSchema()
+      // remove null rows created by performing a lead
+      df.na.drop()
+      // check if lag() was done correctly
+      df.show(400)
+      df.printSchema()
 
-    var deviations = df.groupBy("AvailabilityZone", "InstanceType", "date").agg(stddev("priceChange"))
-    deviations = deviations
-      .withColumnRenamed("stddev_samp(priceChange,0,0)", "stddev")
+      var deviations = df.groupBy("AvailabilityZone", "InstanceType", "date").agg(stddev("priceChange"))
+      deviations = deviations
+        .withColumnRenamed("stddev_samp(priceChange,0,0)", "stddev")
 
-    // calculate average of stddev
-    var average = deviations.na.drop().select(avg("stddev")).head()
-    // fill average when deviation was NaN
-    deviations = deviations.na.fill(average.getDouble(0), Seq("stddev"))
-    deviations.show()
+      // calculate average of stddev
+      var average = deviations.na.drop().select(avg("stddev")).head()
+      // fill average when deviation was NaN
+      deviations = deviations.na.fill(average.getDouble(0), Seq("stddev"))
+      deviations.show()
 
-    // join deviations and df
-    df = df
-      .join(deviations, Seq("AvailabilityZone", "InstanceType", "date"))
+      // join deviations and df
+      df = df
+        .join(deviations, Seq("AvailabilityZone", "InstanceType", "date"))
 
-    df = df
-      .withColumn("isVolatile", (col("priceChange") > (col("stddev") * 2)).cast("Int"))
+      df = df
+        .withColumn("isVolatile", (col("priceChange") > (col("stddev") * 2)).cast("Int"))
 
-    // impute na's
-    df = df.na.fill(0.0, Seq("priceChange", "increase", "futurePrice", "isVolatile"))
+      // impute na's
+      df = df.na.fill(0.0, Seq("priceChange", "increase", "futurePrice", "isVolatile"))
 
-    // check final basetable
-    df.orderBy("AvailabilityZone", "InstanceType", "aggregation").show(400)
-    df.printSchema()
+      // check final basetable
+      df.orderBy("AvailabilityZone", "InstanceType", "aggregation").show(400)
+      df.printSchema()
 
-    // save basetable to csv
-    df.write.format("com.databricks.spark.csv").option("header", "true").mode(SaveMode.Overwrite).save("/Users/tscheys/thesis-data/basetable.csv")
+      // save basetable to csv
+      df.write.format("com.databricks.spark.csv").option("header", "true").mode(SaveMode.Overwrite).save("/Users/tscheys/thesis-data/basetable" + interval + ".csv")
+    }
+
+    // invoke basetableMaker() for every interval
+    INTERVALS.foreach { x => basetableMaker(df, x) }
 
   }
 }
