@@ -15,9 +15,6 @@ import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.spark.ml.feature.Binarizer
 import org.apache.spark.ml.feature.VectorIndexer
 
-// for writing to text file
-import java.io._
-
 // main class
 object ScalaApp {
   def main(args: Array[String]) {
