@@ -31,8 +31,10 @@ object ScalaApp {
     // Statistics
 
     // datapoint per availabilityZone - instanceType pair
-    val fw = new FileWriter("Users/tscheys/thesis-data/test.txt", true)
-    df.groupBy("availabilityZone", "instanceType").count.collect.foreach(println)
+    df.groupBy("availabilityZone", "instanceType").count.coalesce(1)
+   .write.format("com.databricks.spark.csv")
+   .option("header", "true")
+   .save("../thesis-data/obsPerCouple.csv")
 
   }
 }
