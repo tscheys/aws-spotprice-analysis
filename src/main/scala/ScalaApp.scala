@@ -4,37 +4,19 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive
 import org.apache.spark.sql.hive._
-import org.apache.spark.ml
-import org.apache.spark.ml._
+
 // import jodatime
 import com.github.nscala_time.time.Imports._
 import org.apache.spark.rdd
 import org.apache.spark.rdd._
 // ml deps
-import org.apache.spark.ml.Pipeline
-import org.apache.spark.ml.classification.DecisionTreeClassifier
-import org.apache.spark.ml.classification.DecisionTreeClassificationModel
 import org.apache.spark.ml.feature.{StringIndexer, IndexToString, VectorIndexer}
-import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
-import org.apache.spark.ml.classification.{RandomForestClassificationModel, RandomForestClassifier}
-import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
-
-import org.apache.spark.mllib.classification.{SVMModel, SVMWithSGD}
-import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
-import org.apache.spark.mllib.util.MLUtils
-
 import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.spark.ml.feature.Binarizer
-
-import org.apache.spark.ml.classification.LogisticRegression
-
-import org.apache.spark.ml.classification.{BinaryLogisticRegressionSummary, LogisticRegression}
-
-// import rf regression
-import org.apache.spark.ml.Pipeline
-import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.ml.feature.VectorIndexer
-import org.apache.spark.ml.regression.{RandomForestRegressionModel, RandomForestRegressor}
+
+// for writing to text file
+import java.io._
 
 // main class
 object ScalaApp {
@@ -253,7 +235,7 @@ FROM cleanData a""")
     df.printSchema()
 
     // save basetable to csv
-    df.write.format("com.databricks.spark.csv").save("/Users/tscheys/ScalaApp/basetable.csv")
+    df.write.format("com.databricks.spark.csv").save("/Users/tscheys/thesis-data/basetable.csv")
 
   }
 }
