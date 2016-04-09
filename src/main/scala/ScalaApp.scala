@@ -200,7 +200,7 @@ object ScalaApp {
       .join(deviations, Seq("availabilityZone", "instanceType", "date"))
 
     df = df
-      .withColumn("isVolatile", col("priceChange") > (col("stddevcol") * 2))
+      .withColumn("isVolatile", col("priceChange") > (col("stddev") * 2))
 
     // impute na's
     df = df.na.fill(0.0, Seq("priceChange", "increase", "futurePrice", "isVolatile"))
