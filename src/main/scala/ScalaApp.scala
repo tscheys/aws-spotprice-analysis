@@ -179,10 +179,10 @@ FROM cleanData a""")
 
       df.registerTempTable("labelData")
     df = sqlContext.sql("""SELECT a.*, lead(a.increaseTemp) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS increase,
-      lead(a.spotPrice) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation),
-      lead(a.decreaseTemp) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS decrease
-      lead(a.sameTemp) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS same
-      AS futurePrice FROM labelData a""")
+      lead(a.decreaseTemp) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS decrease,
+      lead(a.sameTemp) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS same,
+      lead(a.spotPrice) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS futurePrice
+      FROM labelData a""")
 
     // remove null rows created by performing a lead
     df.na.drop()
