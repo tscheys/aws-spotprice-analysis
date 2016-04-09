@@ -2,10 +2,19 @@
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.functions._
-
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.DataFrame
+
+import org.joda.time
+import org.joda.time._
+import org.joda.time.DateTime
+import org.joda.time.format.DateTimeFormatter
+import org.joda.time.format.DateTimeFormat
+import org.joda.time.format.DateTimeFormatter._
+
+//spark submit command:
+// spark-submit --class "ScalaApp" --master "local[2]" --packages "com.databricks:spark-csv_2.11:1.4.0,joda-time:joda-time:2.9.3" target/scala-2.11/sample-project_2.11-1.0.jar
 
 // main class
 object ScalaApp {
@@ -24,16 +33,14 @@ object ScalaApp {
     val C3_AP = 0.132
     val G2_AP = 1.00
 
-    val INTERVALS = Seq(15, 30, 60)
+    val INTERVALS = Seq(15)
 
     // HELPER FUNCTIONS
 
     // create binary for weekday/weekend
     def isWeekDay = udf((date: String) => {
-      /*val fmt = DateTimeFormat.forPattern("yyyy-MM-dd")
-      val dt = fmt.parseDateTime(date)
-      if(dt.getDayOfWeek < 6) {1} else {0}*/
-      1
+      var formatter: DateTimeFormatter  = DateTimeFormat.forPattern("yyyy-MM-dd")
+      formatter.parseDateTime(date).dayOfWeek().get
     })
 
     def aggregate(split: Int) = udf((date:String, hours: Int, minutes: Int) => {
@@ -113,12 +120,7 @@ object ScalaApp {
         .withColumn("hours", substring(col("TimeStamp"), 12, 2).cast("Int"))
         .withColumn("quarter", substring(col("TimeStamp"), 16, 1).cast("Int"))
         .withColumn("date", substring(col("TimeStamp"), 1, 10))
-      df.show()
-
-      // create aggregation variable (average spot price over every 15 minutes)
-
-      df = df
-        .withColumn("isWeekDay", isWeekDay(col("date")))
+        .withColumn("isWeekDay", isWeekDay(col("date") <= 5))
         .withColumn("isDaytime", (col("hours") > 6 || col("hours") < 18).cast("Int"))
 
       df = df
