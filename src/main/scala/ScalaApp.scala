@@ -32,10 +32,12 @@ object ScalaApp {
       .option("header", "true") // Use first line of all files as header
       .option("inferSchema", "true") // Automatically infer data types
       .load("../thesis-data/basetable.csv")
+
+    df.show()
     // Statistics
 
     // datapoint per availabilityZone - instanceType pair
-    df.groupBy("availabilityZone", "instanceType").count.coalesce(1)
+   /* df.groupBy("availabilityZone", "instanceType").count.coalesce(1)
      .write.format("com.databricks.spark.csv")
      .option("header", "true")
      .save("../thesis-data/obsPerCouple.csv")
@@ -53,6 +55,8 @@ object ScalaApp {
     // check frequency of volatility
     var volatileFreq = df.groupBy("isVolatile").count()
     volatileFreq.show()
+    *
+    */
 
    //val f = new File("../thesis-data//someDir")
   }
