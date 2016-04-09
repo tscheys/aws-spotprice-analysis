@@ -98,7 +98,7 @@ object ScalaApp {
 
       // aggregate data (interpolation)
 
-      df = df.withColumn("aggregation", unix_timestamp(aggregate(15)(col("date"), col("hours"), col("minutes"))))
+      df = df.withColumn("aggregation", unix_timestamp(aggregate(interval)(col("date"), col("hours"), col("minutes"))))
 
       // do quick check if aggregation is properly able to form groups
       df.orderBy("AvailabilityZone", "InstanceType", "aggregation").show()
