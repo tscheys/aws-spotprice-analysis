@@ -252,9 +252,8 @@ FROM cleanData a""")
     df.orderBy("availabilityZone", "instanceType", "aggregation").show(400)
     df.printSchema()
 
-    //df.registerTempTable("data")
-
-    //df = sqlContext.sql("SELECT spotPrice, priceChange, hours, quarter, isWeekDay, isDaytime, increase, futurePrice FROM data WHERE availabilityZone = 'ap-southeast-1b' AND instanceType= 'm1.medium'")
+    // save basetable to csv
+    df.write.format("com.databricks.spark.csv").save("/Users/tscheys/ScalaApp/basetable.csv")
 
   }
 }
