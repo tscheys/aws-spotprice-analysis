@@ -27,11 +27,11 @@ object ScalaApp {
       .format("com.databricks.spark.csv")
       .option("header", "true") // Use first line of all files as header
       .option("inferSchema", "true") // Automatically infer data types
-      .load("Users/tscheys/thesis-data/basetable.csv")
+      .load("../thesis-data/basetable.csv")
     // Statistics
 
     // datapoint per availabilityZone - instanceType pair
-    val fw = new FileWriter("Users/tscheys/ScalaApp/test.txt", true)
+    val fw = new FileWriter("Users/tscheys/thesis-data/test.txt", true)
     df.groupBy("availabilityZone", "instanceType").count.collect.foreach(println)
 
   }
