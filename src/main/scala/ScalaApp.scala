@@ -174,12 +174,14 @@ FROM cleanData a""")
       .withColumn("priceChangeLag1", col("t1") - col("t2"))
       .withColumn("priceChangeLag2", col("t2") - col("t3"))
       .withColumn("increaseTemp", (col("priceChange") > 0).cast("Boolean"))
-      .withColumn("decrease", (col("priceChange") < 0).cast("Boolean"))
-      .withColumn("same", (col("priceChange") === 0).cast("Boolean"))
+      .withColumn("decreaseTemp", (col("priceChange") < 0).cast("Boolean"))
+      .withColumn("sameTemp", (col("priceChange") === 0).cast("Boolean"))
 
       df.registerTempTable("labelData")
     df = sqlContext.sql("""SELECT a.*, lead(a.increaseTemp) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS increase,
-      lead(a.spotPrice) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation)
+      lead(a.spotPrice) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation),
+      lead(a.decreaseTemp) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS decrease
+      lead(a.sameTemp) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS same
       AS futurePrice FROM labelData a""")
 
     // remove null rows created by performing a lead
