@@ -232,7 +232,7 @@ FROM cleanData a""")
     df.printSchema()
 
     // save basetable to csv
-    df.write.format("com.databricks.spark.csv").save("/Users/tscheys/thesis-data/basetable.csv")
+    df.write.format("com.databricks.spark.csv").option("header", "true").save("/Users/tscheys/thesis-data/basetable.csv")
 
   }
 }
