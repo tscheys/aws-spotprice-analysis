@@ -23,18 +23,17 @@ object ScalaApp {
     val sqlContext = new org.apache.spark.sql.hive.HiveContext(sc)
     var df = sqlContext.read.json("/Users/tscheys/ScalaApp/aws.json")
 
-    // inspect data and schema
-    df.show()
-    df.printSchema()
+    // CONSTANTS
 
-    // apply correct types to columns
-    // rename other columns to camelCase
-    df = df
-      .withColumn("spotPrice", col("SpotPrice").cast("Double"))
-      .withColumnRenamed("AvailabilityZone", "availabilityZone")
-      .withColumnRenamed("InstanceType", "instanceType")
-      .withColumnRenamed("ProductDescription", "productDescription")
-      .withColumnRenamed("Timestamp", "timeStamp")
+    // prices for on demand instances
+    val M1_EU_US = 0.095
+    val C3_EU_US = 0.12
+    val G2_EU_US = 0.702
+    val M1_AP = 0.117
+    val C3_AP = 0.132
+    val G2_AP = 1.00
+
+    // HELPER FUNCTIONS
 
     // create binary for weekday/weekend
     def isWeekDay = udf((date: String) => {
@@ -75,6 +74,35 @@ object ScalaApp {
       date + " " + hours + ":" + group + ":" + "00"
 
     })
+    def isIrrational = udf((zone: String, instance: String, price: Double) => {
+    // TODO: rewrite this heaping pile of shit
+
+      // remove subregion reference a, b, c
+      val region  = zone.dropRight(1)
+
+      // check if spot price >= on-demand price
+      region match {
+        case x if x == "eu-west-1" || x == "us-west-2" => instance match {
+          case x if x == "m1.medium" => price >= M1_EU_US
+          case x if x == "c3.large" => price >= C3_EU_US
+          case x if x == "g2.2xlarge" => price >= G2_EU_US
+        }
+        case x if x == "ap-southeast-1" => instance match {
+          case x if x == "m1.medium" => price >= M1_AP
+          case x if x == "c3.large" => price >= C3_AP
+          case x if x == "g2.2xlarge" => price >= G2_AP
+        }
+      }
+    })
+
+    // apply correct types to columns
+    // rename other columns to camelCase
+    df = df
+      .withColumn("spotPrice", col("SpotPrice").cast("Double"))
+      .withColumnRenamed("AvailabilityZone", "availabilityZone")
+      .withColumnRenamed("InstanceType", "instanceType")
+      .withColumnRenamed("ProductDescription", "productDescription")
+      .withColumnRenamed("Timestamp", "timeStamp")
 
     // create time variables
     df = df
@@ -107,31 +135,8 @@ object ScalaApp {
 
     df = df
       .withColumn("isWeekDay", isWeekDay(col("date")))
-      .withColumn("isDaytime", (col("hours") > 6 || col("hours") < 18).cast("Boolean")
+      .withColumn("isDaytime", (col("hours") > 6 || col("hours") < 18).cast("Boolean"))
 
-    // create variable for irrational behaviour
-
-    def isIrrational = udf((zone: String, instance: String, price: Double) => {
-// TODO: rewrite this heaping pile of shit
-
-      // remove subregion reference a, b, c
-      val region  = zone.dropRight(1)
-
-      // check if spot price >= on-demand price
-      if(region == "eu-west-1" || region == "us-west-2") {
-        if(instance == "m1.medium" && price >= 0.095) 1
-        else if(instance == "c3.large" && price >= 0.12) 1
-        else if(instance == "g2.2xlarge" && price >= 0.702) 1
-        else 0
-      } else if(region == "ap-southeast-1") {
-        if(instance == "m1.medium" && price >= 0.117) 1
-        else if(instance == "c3.large" && price >= 0.132) 1
-        else if(instance == "g2.2xlarge" && price >= 1.00) 1
-        else 0
-      }
-      else 0
-
-    })
     df = df
       .withColumn("isIrrational", isIrrational(col("availabilityZone"), col("instanceType"), col("spotPrice")).cast("Integer"))
     // check frequency of irrational behaviour
@@ -149,10 +154,10 @@ object ScalaApp {
     df.registerTempTable("cleanData")
     // use Spark window function to lag()
     df = sqlContext.sql("""SELECT a.*,
-lag(a.spotPrice) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS t1,
-lag(a.spotPrice, 2) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS t2,
-lag(a.spotPrice, 3) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS t3
-FROM cleanData a""")
+        lag(a.spotPrice) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS t1,
+        lag(a.spotPrice, 2) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS t2,
+        lag(a.spotPrice, 3) OVER (PARTITION BY a.availabilityZone, a.instanceType ORDER BY a.aggregation) AS t3
+        FROM cleanData a""")
 
     // some rows contain null values because we have shifted cols with window function
     df = df.na.drop()
@@ -186,7 +191,6 @@ FROM cleanData a""")
 
     // calculate average of stddev
     var average = deviations.na.drop().select(avg("stddev")).head()
-    println(average + " " + average.getDouble(0))
     // fill average when deviation was NaN
     deviations = deviations.na.fill(average.getDouble(0), Seq("stddev"))
     deviations.show()
@@ -195,16 +199,8 @@ FROM cleanData a""")
     df = df
       .join(deviations, Seq("availabilityZone", "instanceType", "date"))
 
-    def isVolatile = udf((priceChange: Double, stddev: Double) => {
-      if(priceChange > 2 * stddev) {
-        1
-      } else {
-        0
-      }
-    })
-
     df = df
-      .withColumn("isVolatile", isVolatile(col("priceChange"), col("stddev")))
+      .withColumn("isVolatile", col("priceChange") > (col("stddevcol") * 2))
 
     // impute na's
     df = df.na.fill(0.0, Seq("priceChange", "increase", "futurePrice", "isVolatile"))
