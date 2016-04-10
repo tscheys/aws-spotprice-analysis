@@ -326,6 +326,12 @@ object rfClassifier {
   }
 }
 
+object rfRegression {
+  def main(args: Array[String]) {
+
+  }
+}
+
 object statistics {
   def main(args: Array[String]) {
     val conf = new SparkConf().setAppName("SpotPriceAnalysis").setMaster("local[2]")
