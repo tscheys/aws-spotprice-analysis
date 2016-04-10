@@ -17,8 +17,9 @@ import org.joda.time.format.DateTimeFormatter._
 // ML
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.classification.{RandomForestClassificationModel, RandomForestClassifier}
-import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
+import org.apache.spark.ml.evaluation.{MulticlassClassificationEvaluator, RegressionEvaluator}
 import org.apache.spark.ml.feature.{IndexToString, StringIndexer, VectorIndexer, VectorAssembler, Binarizer}
+import org.apache.spark.ml.regression.{RandomForestRegressor, RandomForestRegressionModel}
 
 //spark submit command:
 // spark-submit --class "ScalaApp" --master "local[2]" --packages "com.databricks:spark-csv_2.11:1.4.0,joda-time:joda-time:2.9.3" target/scala-2.11/sample-project_2.11-1.0.jar
@@ -328,6 +329,75 @@ object rfClassifier {
 
 object rfRegression {
   def main(args: Array[String]) {
+
+    // LOAD CSV WITH BASETABLE
+    val conf = new SparkConf().setAppName("SpotPriceAnalysis").setMaster("local[2]")
+    val sc = new SparkContext(conf)
+    val sqlContext = new org.apache.spark.sql.hive.HiveContext(sc)
+
+    //define time intervals
+    var INTERVALS = Seq(15,30,60)
+
+    // load a basetable with a certain interval
+    def loadBasetable = (interval: Int) => {
+      sqlContext
+        .read
+        .format("com.databricks.spark.csv")
+        .option("header", "true") // Use first line of all files as header
+        .option("inferSchema", "true") // Automatically infer data types
+        .load("../thesis-data/basetable" + interval +".csv")
+    }
+
+    val basetables = for (interval <- INTERVALS) yield loadBasetable(interval)
+
+    // START RF REGRESSION
+    def rfRegression = (data: DataFrame) => {
+      var df = data
+      val assembler = new VectorAssembler()
+      .setInputCols(Array("spotPrice", "priceChange", "hours", "quarter", "isWeekDay", "isDaytime"))
+      .setOutputCol("features")
+
+      // prepare variables for random forest
+      df = assembler.transform(df)
+
+      val featureIndexer = new VectorIndexer()
+        .setInputCol("features")
+        .setOutputCol("indexedFeatures")
+        .setMaxCategories(4)
+        .fit(df)
+
+      // Split the data into training and test sets (30% held out for testing)
+      val Array(trainingData, testData) = df.randomSplit(Array(0.7, 0.3))
+
+      // Train a RandomForest model.
+      val rf = new RandomForestRegressor()
+        .setLabelCol("futurePrice")
+        .setFeaturesCol("indexedFeatures")
+
+      // Chain indexer and forest in a Pipeline
+      val pipeline = new Pipeline()
+        .setStages(Array(featureIndexer, rf))
+
+      // Train model.  This also runs the indexer.
+      val model = pipeline.fit(trainingData)
+
+      // Make predictions.
+      val predictions = model.transform(testData)
+
+      // Select example rows to display.
+      predictions.select("prediction", "futurePrice", "features").show(40)
+
+      // Select (prediction, true label) and compute test error
+      val evaluator = new RegressionEvaluator()
+        .setLabelCol("futurePrice")
+        .setPredictionCol("prediction")
+        .setMetricName("rmse")
+      val rmse = evaluator.evaluate(predictions)
+      println("Root Mean Squared Error (RMSE) on test data = " + rmse)
+
+      val rfModel = model.stages(1).asInstanceOf[RandomForestRegressionModel]
+      //println("Learned regression forest model:\n" + rfModel.toDebugString)
+    }
 
   }
 }
