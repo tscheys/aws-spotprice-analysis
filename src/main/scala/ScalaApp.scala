@@ -6,12 +6,19 @@ import org.apache.spark.sql.hive._
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.DataFrame
 
+// joda
 import org.joda.time
 import org.joda.time._
 import org.joda.time.DateTime
 import org.joda.time.format.DateTimeFormatter
 import org.joda.time.format.DateTimeFormat
 import org.joda.time.format.DateTimeFormatter._
+
+// ML
+import org.apache.spark.ml.Pipeline
+import org.apache.spark.ml.classification.{RandomForestClassificationModel, RandomForestClassifier}
+import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
+import org.apache.spark.ml.feature.{IndexToString, StringIndexer, VectorIndexer, VectorAssembler, Binarizer}
 
 //spark submit command:
 // spark-submit --class "ScalaApp" --master "local[2]" --packages "com.databricks:spark-csv_2.11:1.4.0,joda-time:joda-time:2.9.3" target/scala-2.11/sample-project_2.11-1.0.jar
@@ -230,6 +237,76 @@ object rfClassifier {
 
     //check if loaded correctly into array
     basetables(0).show()
+
+    //START RF CLASSIFIER
+
+    def rfClassifier = (data: DataFrame) => {
+      var df = data
+      val assembler = new VectorAssembler()
+        .setInputCols(Array("spotPrice", "priceChange", "hours", "quarter", "isWeekDay", "isDaytime"))
+        .setOutputCol("features")
+      // convert increase to binary variable
+      val binarizer: Binarizer = new Binarizer()
+        .setInputCol("increase")
+        .setOutputCol("label")
+        .setThreshold(0.5)
+
+      // prepare variables for random forest
+      df = assembler.transform(df)
+      df = binarizer.transform(df)
+      df = df.select("features", "label")
+
+      val labelIndexer = new StringIndexer()
+        .setInputCol("label")
+        .setOutputCol("indexedLabel")
+        .fit(df)
+      // Automatically identify categorical features, and index them.
+      // Set maxCategories so features with > 4 distinct values are treated as continuous.
+      val featureIndexer = new VectorIndexer()
+        .setInputCol("features")
+        .setOutputCol("indexedFeatures")
+        .setMaxCategories(4)
+        .fit(df)
+
+      // Split the data into training and test sets (30% held out for testing)
+      val Array(train, test) = df.randomSplit(Array(0.7, 0.3))
+
+      // Train a RandomForest model.
+      val rf = new RandomForestClassifier()
+        .setLabelCol("indexedLabel")
+        .setFeaturesCol("indexedFeatures")
+        .setNumTrees(400)
+
+      // Convert indexed labels back to original labels.
+      val labelConverter = new IndexToString()
+        .setInputCol("prediction")
+        .setOutputCol("predictedLabel")
+        .setLabels(labelIndexer.labels)
+
+      // Chain indexers and forest in a Pipeline
+      val pipeline = new Pipeline()
+        .setStages(Array(labelIndexer, featureIndexer, rf, labelConverter))
+
+      // Train model.  This also runs the indexers.
+      val model = pipeline.fit(train)
+      //model.save("/Users/tscheys/ScalaApp")
+      // Make predictions.
+      val predictions = model.transform(test)
+
+      // Select example rows to display.
+      predictions.select("predictedLabel", "label", "features").show(100)
+
+      // Select (prediction, true label) and compute test error
+      val evaluator = new MulticlassClassificationEvaluator()
+        .setLabelCol("indexedLabel")
+        .setPredictionCol("prediction")
+        .setMetricName("precision")
+      val accuracy = evaluator.evaluate(predictions)
+      println("Test Error = " + (1.0 - accuracy))
+
+      val rfModel = model.stages(2).asInstanceOf[RandomForestClassificationModel]
+      //println("Learned classification forest model:\n" + rfModel.toDebugString)
+    }
 
   }
 }
