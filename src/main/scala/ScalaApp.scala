@@ -163,9 +163,9 @@ object ScalaApp {
         .withColumn("priceChange", col("spotPrice") - col("t1"))
         .withColumn("priceChangeLag1", col("t1") - col("t2"))
         .withColumn("priceChangeLag2", col("t2") - col("t3"))
-        .withColumn("increaseTemp", (col("priceChange") > 0).cast("Int"))
-        .withColumn("decreaseTemp", (col("priceChange") < 0).cast("Int"))
-        .withColumn("sameTemp", (col("priceChange") === 0).cast("Int"))
+        .withColumn("increaseTemp", (col("priceChange") > 0).cast("Double"))
+        .withColumn("decreaseTemp", (col("priceChange") < 0).cast("Double"))
+        .withColumn("sameTemp", (col("priceChange") === 0).cast("Double"))
 
       df.registerTempTable("labelData")
       df = sqlContext.sql("""SELECT a.*, lead(a.increaseTemp) OVER (PARTITION BY a.AvailabilityZone, a.InstanceType ORDER BY a.aggregation) AS increase,
