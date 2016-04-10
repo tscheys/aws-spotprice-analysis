@@ -40,7 +40,7 @@ object basetable {
     val C3_AP = 0.132
     val G2_AP = 1.00
 
-    val INTERVALS = Seq(15)
+    val INTERVALS = Seq(15, 30, 45)
 
     // HELPER FUNCTIONS
 
@@ -198,7 +198,7 @@ object basetable {
         .withColumn("isVolatile", (col("priceChange") > (col("stddev") * 2)).cast("Int"))
 
       // impute na's
-      df = df.na.fill(0.0, Seq("priceChange", "increase", "futurePrice", "isVolatile"))
+      df = df.na.fill(0.0, Seq("priceChange", "increase", "decrease", "same" ,"futurePrice", "isVolatile"))
 
       // check final basetable
       df.orderBy("AvailabilityZone", "InstanceType", "aggregation").show(400)
