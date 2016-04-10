@@ -240,14 +240,14 @@ object rfClassifier {
 
     //START RF CLASSIFIER
 
-    def rfClassifier = (data: DataFrame) => {
+    def rfClassifier = (data: DataFrame, label: String, features: Array[String]) => {
       var df = data
       val assembler = new VectorAssembler()
-        .setInputCols(Array("spotPrice", "priceChange", "hours", "quarter", "isWeekDay", "isDaytime"))
+        .setInputCols(features)
         .setOutputCol("features")
       // convert increase to binary variable
       val binarizer: Binarizer = new Binarizer()
-        .setInputCol("increase")
+        .setInputCol(label)
         .setOutputCol("label")
         .setThreshold(0.5)
 
@@ -275,7 +275,7 @@ object rfClassifier {
       val rf = new RandomForestClassifier()
         .setLabelCol("indexedLabel")
         .setFeaturesCol("indexedFeatures")
-        .setNumTrees(400)
+        .setNumTrees(100)
 
       // Convert indexed labels back to original labels.
       val labelConverter = new IndexToString()
