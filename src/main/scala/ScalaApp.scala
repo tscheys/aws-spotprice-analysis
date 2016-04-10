@@ -206,3 +206,9 @@ object ScalaApp {
 
   }
 }
+
+object rfClassifier {
+  def main(args: Array[String]) {
+
+  }
+}
