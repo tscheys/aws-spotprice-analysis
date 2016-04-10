@@ -302,11 +302,26 @@ object rfClassifier {
         .setPredictionCol("prediction")
         .setMetricName("precision")
       val accuracy = evaluator.evaluate(predictions)
-      println("Test Error = " + (1.0 - accuracy))
 
-      val rfModel = model.stages(2).asInstanceOf[RandomForestClassificationModel]
+      //val rfModel = model.stages(2).asInstanceOf[RandomForestClassificationModel]
       //println("Learned classification forest model:\n" + rfModel.toDebugString)
+      //return accuracies
+      "Test Error = " + (1.0 - accuracy)
     }
+
+    // define features
+    val features = Array("spotPrice", "priceChange", "priceChangeLag1", "priceChangeLag2", "isIrrational", "t1", "t2", "t3", "stddev", "isVolatile" , "hours", "quarter", "isWeekDay", "isDaytime")
+    val labels = Array("increase", "decrease", "same")
+
+    /* for every basetable in basetables
+    * make a rfClassifier
+    * same NoTrees
+    *
+    */
+
+    val accuracies = for (basetable <- basetables) yield rfClassifier(basetable, labels(0), features)
+
+    accuracies.foreach(println)
 
   }
 }
