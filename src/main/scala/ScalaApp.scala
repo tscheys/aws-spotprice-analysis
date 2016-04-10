@@ -209,6 +209,27 @@ object ScalaApp {
 
 object rfClassifier {
   def main(args: Array[String]) {
+    val conf = new SparkConf().setAppName("SpotPriceAnalysis").setMaster("local[2]")
+    val sc = new SparkContext(conf)
+    val sqlContext = new org.apache.spark.sql.hive.HiveContext(sc)
+
+    //define time intervals
+    var INTERVALS = Seq(15,30,60)
+
+    // load a basetable with a certain interval
+    def loadBasetable = (interval: Int) => {
+      sqlContext
+        .read
+        .format("com.databricks.spark.csv")
+        .option("header", "true") // Use first line of all files as header
+        .option("inferSchema", "true") // Automatically infer data types
+        .load("../thesis-data/basetable" + interval +".csv")
+    }
+
+    val basetables = for (interval <- INTERVALS) yield loadBasetable(interval)
+
+    //check if loaded correctly into array
+    basetables(0).show()
 
   }
 }
