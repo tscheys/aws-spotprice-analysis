@@ -24,12 +24,12 @@ import org.apache.spark.ml.feature.{IndexToString, StringIndexer, VectorIndexer,
 // spark-submit --class "ScalaApp" --master "local[2]" --packages "com.databricks:spark-csv_2.11:1.4.0,joda-time:joda-time:2.9.3" target/scala-2.11/sample-project_2.11-1.0.jar
 
 // main class
-object ScalaApp {
+object basetable {
   def main(args: Array[String]) {
     val conf = new SparkConf().setAppName("SpotPriceAnalysis").setMaster("local[2]")
     val sc = new SparkContext(conf)
     val sqlContext = new org.apache.spark.sql.hive.HiveContext(sc)
-    var df = sqlContext.read.json("/Users/tscheys/ScalaApp/aws.json")
+    val df = sqlContext.read.json("/Users/tscheys/ScalaApp/aws.json")
 
     // CONSTANTS
     // prices for on demand instances
@@ -323,5 +323,46 @@ object rfClassifier {
 
     accuracies.foreach(println)
 
+  }
+}
+
+object statistics {
+  def main(args: Array[String]) {
+    val conf = new SparkConf().setAppName("SpotPriceAnalysis").setMaster("local[2]")
+    val sc = new SparkContext(conf)
+    val sqlContext = new org.apache.spark.sql.hive.HiveContext(sc)
+    val df = sqlContext.read
+      .format("com.databricks.spark.csv")
+      .option("header", "true") // Use first line of all files as header
+      .option("inferSchema", "true") // Automatically infer data types
+      .load("../thesis-data/basetable15.csv")
+
+    df.show()
+    df.printSchema()
+    // Statistics
+
+    // datapoint per availabilityZone - instanceType pair
+   /* df.groupBy("availabilityZone", "instanceType").count.coalesce(1)
+     .write.format("com.databricks.spark.csv")
+     .option("header", "true")
+     .save("../thesis-data/obsPerCouple.csv")
+
+   df.printSchema()
+   df.show()
+
+   df.groupBy("availabilityZone", "instanceType").agg(stddev("priceChange")).coalesce(1)
+     .write.format("com.databricks.spark.csv")
+     .option("header", "true")
+     .save("../thesis-data/volatility.csv")
+   //DateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
+  //Date date = new Date();
+
+    // check frequency of volatility
+    var volatileFreq = df.groupBy("isVolatile").count()
+    volatileFreq.show()
+    *
+    */
+
+   //val f = new File("../thesis-data//someDir")
   }
 }
