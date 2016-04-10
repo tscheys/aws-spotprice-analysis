@@ -393,11 +393,16 @@ object rfRegression {
         .setPredictionCol("prediction")
         .setMetricName("rmse")
       val rmse = evaluator.evaluate(predictions)
-      println("Root Mean Squared Error (RMSE) on test data = " + rmse)
 
       val rfModel = model.stages(1).asInstanceOf[RandomForestRegressionModel]
       //println("Learned regression forest model:\n" + rfModel.toDebugString)
+
+      "Root Mean Squared Error (RMSE) on test data = " + rmse
     }
+
+    val RMSE = for (basetable <- basetables) yield rfRegression(basetable)
+
+    RMSE.foreach {println}
 
   }
 }
