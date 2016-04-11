@@ -223,7 +223,7 @@ object rfClassifier {
     val sqlContext = new org.apache.spark.sql.hive.HiveContext(sc)
 
     //define time intervals
-    val INTERVALS = Seq(15,30,60)
+    val INTERVALS = Seq(60)
     val NUM_TREES = 200
 
     // load a basetable with a certain interval
@@ -294,8 +294,7 @@ object rfClassifier {
 
       // Train model.  This also runs the indexers.
       val model = pipeline.fit(train)
-      //model.save("/Users/tscheys/ScalaApp")
-      // Make predictions.
+
       val predictions = model.transform(test)
 
       // Select example rows to display.
@@ -308,10 +307,13 @@ object rfClassifier {
         .setMetricName("precision")
       val accuracy = evaluator.evaluate(predictions)
 
+      val results  = model.stages(2)
+      val importances = results.asInstanceOf[RandomForestClassificationModel].featureImportances
+
       //val rfModel = model.stages(2).asInstanceOf[RandomForestClassificationModel]
       //println("Learned classification forest model:\n" + rfModel.toDebugString)
       //return accuracies
-      "Test Error = " + (1.0 - accuracy)
+      "Test Error = " + (1.0 - accuracy) + "\n" + "Varimportances" + "\n" + importances.toJson
     }
 
     // define features
@@ -332,7 +334,7 @@ object rfClassifier {
     println("for intervals")
     INTERVALS.foreach(println)
     println("Test error = 1 - accuracy")
-    accuracies.foreach(println)
+    accuracies.foreach(x => x.foreach (println))
 
   }
 }
