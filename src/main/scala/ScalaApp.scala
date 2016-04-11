@@ -436,26 +436,31 @@ object statistics {
     // Statistics
 
     // datapoint per availabilityZone - instanceType pair
-   /* df.groupBy("availabilityZone", "instanceType").count.coalesce(1)
+    df.groupBy("availabilityZone", "instanceType").count.coalesce(1)
      .write.format("com.databricks.spark.csv")
      .option("header", "true")
+     .mode(SaveMode.Overwrite)
      .save("../thesis-data/obsPerCouple.csv")
 
    df.printSchema()
    df.show()
 
-   df.groupBy("availabilityZone", "instanceType").agg(stddev("priceChange")).coalesce(1)
+   df.groupBy("availabilityZone", "instanceType").avg("priceChange").coalesce(1)
      .write.format("com.databricks.spark.csv")
      .option("header", "true")
+     .mode(SaveMode.Overwrite)
      .save("../thesis-data/volatility.csv")
+
    //DateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
   //Date date = new Date();
 
     // check frequency of volatility
     var volatileFreq = df.groupBy("isVolatile").count()
+    var irrationalFreq = df.groupBy("isIrrational").count()
+    println("number of volatile obs")
     volatileFreq.show()
-    *
-    */
+    println("number of irrational obs")
+    irrationalFreq.show()
 
    //val f = new File("../thesis-data//someDir")
   }
