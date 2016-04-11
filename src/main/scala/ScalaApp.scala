@@ -5,6 +5,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.DataFrame
 
 // joda
 import org.joda.time
@@ -431,32 +432,39 @@ object statistics {
       .option("inferSchema", "true") // Automatically infer data types
       .load("../thesis-data/basetable15.csv")
 
+    val features = Array("spotPrice", "priceChange", "priceChangeLag1", "priceChangeLag2", "isIrrational", "t1", "t2", "t3", "stddev", "isVolatile" , "hours", "quarter", "isWeekDay", "isDaytime")
+
     df.show()
     df.printSchema()
     // Statistics
 
     // datapoint per availabilityZone - instanceType pair
-   /* df.groupBy("availabilityZone", "instanceType").count.coalesce(1)
+    df.groupBy("availabilityZone", "instanceType").count.coalesce(1)
      .write.format("com.databricks.spark.csv")
      .option("header", "true")
+     .mode(SaveMode.Overwrite)
      .save("../thesis-data/obsPerCouple.csv")
 
-   df.printSchema()
-   df.show()
+    df.printSchema()
+    df.show()
 
-   df.groupBy("availabilityZone", "instanceType").agg(stddev("priceChange")).coalesce(1)
+    // calculate correlations between features and label
+    var correlations = for (feature <- features) yield  feature + ": " +  df.stat.corr(feature, "increase")
+
+    df.groupBy("availabilityZone", "instanceType").avg("priceChange").coalesce(1)
      .write.format("com.databricks.spark.csv")
      .option("header", "true")
+     .mode(SaveMode.Overwrite)
      .save("../thesis-data/volatility.csv")
-   //DateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
-  //Date date = new Date();
 
     // check frequency of volatility
     var volatileFreq = df.groupBy("isVolatile").count()
+    var irrationalFreq = df.groupBy("isIrrational").count()
+    println("number of volatile obs")
     volatileFreq.show()
-    *
-    */
+    println("number of irrational obs")
+    irrationalFreq.show()
 
-   //val f = new File("../thesis-data//someDir")
+    correlations.foreach (println)
   }
 }
