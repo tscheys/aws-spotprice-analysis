@@ -243,7 +243,7 @@ object rfClassifier {
 
     //START RF CLASSIFIER
 
-    def rfClassifier = (data: DataFrame, label: String, features: Array[String]) => {
+    def rfClassifier = (data: DataFrame, label: String, features: Array[String], zone: String, instance: String) => {
       // subset dataset for m1.medium and us-west-2a
       //var df = data.filter("InstanceType = 'm1.medium'").filter("AvailabilityZone = 'us-west-2a'")
       var df = data
@@ -320,16 +320,15 @@ object rfClassifier {
     // , "priceChangeLag1", "priceChangeLag2"
     val labels = Array("increase", "decrease", "same")
 
-    /* for every basetable in basetables
-    * make a rfClassifier
-    * same NoTrees
-    *
-    */
+    val couples = Array(Array("us-west-2a", "m1.medium" ), Array("ap-southeast-1a", "c3.large"),Array("us-west-2b", "c3.large"))
 
-    val accuracies = for (basetable <- basetables) yield rfClassifier(basetable, labels(0), features)
+    // return accuracies for each basetable
+    val accuracies = for (basetable <- basetables) yield {
+      // for each basetable, try out different couples
+      for (couple <- couples) yield  "zone" + couple(0) + " instance " + couple(1) + ":" +  rfClassifier(basetable, labels(0), features, couple(0), couple(1))
+    }
 
     println("Report on Random Forest classifier (no trees: " + NUM_TREES + ")")
-    println("m1.medium   - us-west-2a")
     println("for intervals")
     INTERVALS.foreach(println)
     println("Test error = 1 - accuracy")
