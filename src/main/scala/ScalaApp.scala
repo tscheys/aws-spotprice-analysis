@@ -243,6 +243,8 @@ object rfClassifier {
     //START RF CLASSIFIER
 
     def rfClassifier = (data: DataFrame, label: String, features: Array[String]) => {
+      // subset dataset for m1.medium and us-west-2a
+      //var df = data.filter("InstanceType = 'm1.medium'").filter("AvailabilityZone = 'us-west-2a'")
       var df = data
       val assembler = new VectorAssembler()
         .setInputCols(features)
@@ -312,7 +314,9 @@ object rfClassifier {
     }
 
     // define features
-    val features = Array("spotPrice", "priceChange", "priceChangeLag1", "priceChangeLag2", "isIrrational", "t1", "t2", "t3", "stddev", "isVolatile" , "hours", "quarter", "isWeekDay", "isDaytime")
+    val featuresOne = Array("spotPrice", "priceChange", "priceChangeLag1", "priceChangeLag2", "isIrrational", "t1", "t2", "t3", "stddev", "isVolatile" , "hours", "quarter", "isWeekDay", "isDaytime")
+    val features = Array("spotPrice", "priceChange", "hours", "quarter", "isWeekDay", "isDaytime" )
+    // , "priceChangeLag1", "priceChangeLag2"
     val labels = Array("increase", "decrease", "same")
 
     /* for every basetable in basetables
@@ -324,6 +328,7 @@ object rfClassifier {
     val accuracies = for (basetable <- basetables) yield rfClassifier(basetable, labels(0), features)
 
     println("Report on Random Forest classifier (no trees: " + NUM_TREES + ")")
+    println("m1.medium   - us-west-2a")
     println("for intervals")
     INTERVALS.foreach(println)
     println("Test error = 1 - accuracy")
@@ -357,7 +362,10 @@ object rfRegression {
 
     // START RF REGRESSION
     def rfRegression = (data: DataFrame) => {
-      var df = data
+
+      // subset dataset for m1.medium and us-west-2a
+      var df = data.filter("InstanceType == m1.medium").filter("AvailabilityZone == us-west-2a")
+
       val assembler = new VectorAssembler()
       .setInputCols(Array("spotPrice", "priceChange", "hours", "quarter", "isWeekDay", "isDaytime"))
       .setOutputCol("features")
