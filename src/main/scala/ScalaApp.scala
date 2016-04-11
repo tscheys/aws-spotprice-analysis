@@ -449,9 +449,10 @@ object statistics {
     df.show()
 
     // calculate correlations between features and label
-    var correlations = for (feature <- features) yield  feature + ": " +  df.stat.corr(feature, "increase")
+   var correlations = for (feature <- features) yield  feature + ": " +  df.stat.corr(feature, "increase")
 
-    df.groupBy("availabilityZone", "instanceType").avg("priceChange").coalesce(1)
+   df.groupBy("availabilityZone", "instanceType").avg("priceChange").coalesce(1)
+
      .write.format("com.databricks.spark.csv")
      .option("header", "true")
      .mode(SaveMode.Overwrite)
