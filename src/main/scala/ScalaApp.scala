@@ -22,7 +22,7 @@ import org.apache.spark.ml.feature.{IndexToString, StringIndexer, VectorIndexer,
 import org.apache.spark.ml.regression.{RandomForestRegressor, RandomForestRegressionModel}
 
 //spark submit command:
-// spark-submit --class "ScalaApp" --master "local[2]" --packages "com.databricks:spark-csv_2.11:1.4.0,joda-time:joda-time:2.9.3" target/scala-2.11/sample-project_2.11-1.0.jar
+// spark-submit --class "basetable" --master "local[2]" --packages "com.databricks:spark-csv_2.11:1.4.0,joda-time:joda-time:2.9.3" target/scala-2.11/sample-project_2.11-1.0.jar
 
 // main class
 object basetable {
@@ -41,7 +41,7 @@ object basetable {
     val C3_AP = 0.132
     val G2_AP = 1.00
 
-    val INTERVALS = Seq(15, 30, 45)
+    val INTERVALS = Seq(15, 30, 60)
 
     // HELPER FUNCTIONS
 
@@ -222,7 +222,8 @@ object rfClassifier {
     val sqlContext = new org.apache.spark.sql.hive.HiveContext(sc)
 
     //define time intervals
-    var INTERVALS = Seq(15,30,60)
+    val INTERVALS = Seq(15,30,60)
+    val NUM_TREES = 200
 
     // load a basetable with a certain interval
     def loadBasetable = (interval: Int) => {
@@ -276,7 +277,7 @@ object rfClassifier {
       val rf = new RandomForestClassifier()
         .setLabelCol("indexedLabel")
         .setFeaturesCol("indexedFeatures")
-        .setNumTrees(100)
+        .setNumTrees(NUM_TREES)
 
       // Convert indexed labels back to original labels.
       val labelConverter = new IndexToString()
@@ -322,6 +323,10 @@ object rfClassifier {
 
     val accuracies = for (basetable <- basetables) yield rfClassifier(basetable, labels(0), features)
 
+    println("Report on Random Forest classifier (no trees: " + NUM_TREES + ")")
+    println("for intervals")
+    INTERVALS.foreach(println)
+    println("Test error = 1 - accuracy")
     accuracies.foreach(println)
 
   }
