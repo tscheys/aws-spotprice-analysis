@@ -319,6 +319,7 @@ object rfClassifier {
     // define features
     val featuresOne = Array("spotPrice", "priceChange", "priceChangeLag1", "priceChangeLag2", "isIrrational", "t1", "t2", "t3", "stddev", "isVolatile" , "hours", "quarter", "isWeekDay", "isDaytime")
     val features = Array("spotPrice", "priceChange", "hours", "quarter", "isWeekDay", "isDaytime" )
+    val featuresAfterImp = Array("spotPrice", "priceChange", "hours", "isWeekDay")
     // , "priceChangeLag1", "priceChangeLag2"
     val labels = Array("increase", "decrease", "same")
 
@@ -327,10 +328,11 @@ object rfClassifier {
     // return accuracies for each basetable
     val accuracies = for (basetable <- basetables) yield {
       // for each basetable, try out different couples
-      for (couple <- couples) yield  "zone" + couple(0) + " instance " + couple(1) + ":" +  rfClassifier(basetable, labels(0), features, couple(0), couple(1))
+      for (couple <- couples) yield  "zone" + couple(0) + " instance " + couple(1) + ":" +  rfClassifier(basetable, labels(0), featuresAfterImp, couple(0), couple(1))
     }
 
     println("Report on Random Forest classifier (no trees: " + NUM_TREES + ")")
+    println("y var: " + labels(0))
     println("for intervals")
     INTERVALS.foreach(println)
     println("Test error = 1 - accuracy")
