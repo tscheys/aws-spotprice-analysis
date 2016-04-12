@@ -42,7 +42,7 @@ object basetable {
     val C3_AP = 0.132
     val G2_AP = 1.00
 
-    val INTERVALS = Seq(15, 30, 60)
+    val INTERVALS = Seq(60)
 
     // HELPER FUNCTIONS
 
@@ -176,15 +176,7 @@ object basetable {
       df.printSchema()
 
       // calculate avg, max, min, stddev of previous day
-      var dailies = df.groupBy("date").agg(Map(
-        "spotPrice" -> "avg",
-        "spotPrice" -> "max",
-        "spotPrice" -> "min",
-        "spotPrice" -> "stddev",
-        "priceChange" -> "avg",
-        "priceChange" -> "max",
-        "priceChange" -> "min",
-        "priceChange" -> "stddev"))
+      var dailies = df.groupBy("date").agg(avg("spotPrice" ),max("spotPrice"), min("spotPrice"), avg("priceChange"), max("priceChange"), min("priceChange"))
 
       // create column with date + 1 day (we want stats of 1st january to be used on 2nd of january)
       def datePlusOne = udf((date: String) => {
@@ -194,20 +186,25 @@ object basetable {
       })
       dailies = dailies
         .withColumn("date", datePlusOne(col("date")))
-      df = df
+      dailies.show()
+      dailies.printSchema()
+      /*df = df
         .join(dailies, Seq("date"))
 
       var deviations = df.groupBy("AvailabilityZone", "InstanceType", "date").agg(stddev("priceChange"))
       deviations = deviations
         .withColumnRenamed("stddev_samp(priceChange,0,0)", "stddev")
 
+      df.show()
+      df.printSchema()
       // calculate average of stddev
-      var average = deviations.na.drop().select(avg("stddev")).head()
+      //var average = deviations.na.drop().select(avg("stddev")).head()
       // fill average when deviation was NaN
-      deviations = deviations.na.fill(average.getDouble(0), Seq("stddev"))
-      deviations.show()
-
+      //deviations = deviations.na.fill(average.getDouble(0), Seq("stddev"))
+      //deviations.show()
+*/
       // join deviations and df
+      /*
       df = df
         .join(deviations, Seq("AvailabilityZone", "InstanceType", "date"))
 
@@ -223,6 +220,8 @@ object basetable {
 
       // save basetable to csv
       df.write.format("com.databricks.spark.csv").option("header", "true").mode(SaveMode.Overwrite).save("/Users/tscheys/thesis-data/basetable" + interval + ".csv")
+      * */
+
     }
 
     // invoke basetableMaker() for every interval
