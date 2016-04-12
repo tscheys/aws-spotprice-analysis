@@ -182,13 +182,13 @@ object basetable {
       def datePlusOne = udf((date: String) => {
         var formatter: DateTimeFormatter  = DateTimeFormat.forPattern("yyyy-MM-dd")
         var nextDate = formatter.parseDateTime(date).plusDays(1)
-        nextDate.toString()
+        formatter.print(nextDate)
       })
       dailies = dailies
         .withColumn("date", datePlusOne(col("date")))
       dailies.show()
       dailies.printSchema()
-      /*df = df
+      df = df
         .join(dailies, Seq("date"))
 
       var deviations = df.groupBy("AvailabilityZone", "InstanceType", "date").agg(stddev("priceChange"))
@@ -202,9 +202,9 @@ object basetable {
       // fill average when deviation was NaN
       //deviations = deviations.na.fill(average.getDouble(0), Seq("stddev"))
       //deviations.show()
-*/
+
       // join deviations and df
-      /*
+
       df = df
         .join(deviations, Seq("AvailabilityZone", "InstanceType", "date"))
 
@@ -220,7 +220,6 @@ object basetable {
 
       // save basetable to csv
       df.write.format("com.databricks.spark.csv").option("header", "true").mode(SaveMode.Overwrite).save("/Users/tscheys/thesis-data/basetable" + interval + ".csv")
-      * */
 
     }
 
