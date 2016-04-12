@@ -129,27 +129,19 @@ object basetable {
         .withColumn("hours", substring(col("TimeStamp"), 12, 2).cast("Int"))
         .withColumn("quarter", substring(col("TimeStamp"), 16, 1).cast("Int"))
         .withColumn("date", substring(col("TimeStamp"), 1, 10))
-        df.show()
-      df = df
         .withColumn("isWeekDay", (isWeekDay(col("date")) <= 5).cast("Int"))
+        .withColumn("dayOfWeek", isWeekDay(col("date")))
         .withColumn("isDaytime", (col("hours") >= 6 || col("hours") <= 18).cast("Int"))
         .withColumn("isWorktime", (col("hours") >= 9 || col("hours") <= 17).cast("Int"))
         .withColumn("isNight", (col("hours") >= 0 || col("hours") <= 6).cast("Int"))
         .withColumn("isWorktime", (col("hours") >= 8 || col("hours") <= 18).cast("Int"))
-
-      df = df
         .withColumn("isIrrational", isIrrational(col("AvailabilityZone"), col("InstanceType"), col("spotPrice")).cast("Integer"))
-      // check frequency of irrational behaviour
-      df.printSchema()
-      df.show()
-
-      // check if isIrration() worked
-      println(df.stat.freqItems(Seq("isIrrational")).show())
-      //df.show(100)
 
       // make sure changes to columns are correct
       df.show()
       df.printSchema()
+
+      // calculate avg, max, min, stddev of previous day
 
       df.registerTempTable("cleanData")
       // use Spark window function to lag()
