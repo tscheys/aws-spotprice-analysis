@@ -186,6 +186,17 @@ object basetable {
         "priceChange" -> "min",
         "priceChange" -> "stddev"))
 
+      // create column with date + 1 day (we want stats of 1st january to be used on 2nd of january)
+      def datePlusOne = udf((date: String) => {
+        var formatter: DateTimeFormatter  = DateTimeFormat.forPattern("yyyy-MM-dd")
+        var nextDate = formatter.parseDateTime(date).plusDays(1)
+        nextDate.toString()
+      })
+      dailies = dailies
+        .withColumn("date", datePlusOne(col("date")))
+      df = df
+        .join(dailies, Seq("date"))
+
       var deviations = df.groupBy("AvailabilityZone", "InstanceType", "date").agg(stddev("priceChange"))
       deviations = deviations
         .withColumnRenamed("stddev_samp(priceChange,0,0)", "stddev")
