@@ -132,7 +132,10 @@ object basetable {
         df.show()
       df = df
         .withColumn("isWeekDay", (isWeekDay(col("date")) <= 5).cast("Int"))
-        .withColumn("isDaytime", (col("hours") > 6 || col("hours") < 18).cast("Int"))
+        .withColumn("isDaytime", (col("hours") >= 6 || col("hours") <= 18).cast("Int"))
+        .withColumn("isWorktime", (col("hours") >= 9 || col("hours") <= 17).cast("Int"))
+        .withColumn("isNight", (col("hours") >= 0 || col("hours") <= 6).cast("Int"))
+        .withColumn("isWorktime", (col("hours") >= 8 || col("hours") <= 18).cast("Int"))
 
       df = df
         .withColumn("isIrrational", isIrrational(col("AvailabilityZone"), col("InstanceType"), col("spotPrice")).cast("Integer"))
