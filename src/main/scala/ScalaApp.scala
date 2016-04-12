@@ -141,8 +141,6 @@ object basetable {
       df.show()
       df.printSchema()
 
-      // calculate avg, max, min, stddev of previous day
-
       df.registerTempTable("cleanData")
       // use Spark window function to lag()
       df = sqlContext.sql("""SELECT a.*,
@@ -176,6 +174,17 @@ object basetable {
       // check if lag() was done correctly
       df.show(400)
       df.printSchema()
+
+      // calculate avg, max, min, stddev of previous day
+      var dailies = df.groupBy("date").agg(Map(
+        "spotPrice" -> "avg",
+        "spotPrice" -> "max",
+        "spotPrice" -> "min",
+        "spotPrice" -> "stddev",
+        "priceChange" -> "avg",
+        "priceChange" -> "max",
+        "priceChange" -> "min",
+        "priceChange" -> "stddev"))
 
       var deviations = df.groupBy("AvailabilityZone", "InstanceType", "date").agg(stddev("priceChange"))
       deviations = deviations
