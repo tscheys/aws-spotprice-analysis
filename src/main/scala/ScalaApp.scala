@@ -87,7 +87,8 @@ object helper {
           }
         }
       })
-              // create column with date + 1 day (we want stats of 1st january to be used on 2nd of january)
+
+      // create column with date + 1 day (we want stats of 1st january to be used on 2nd of january)
       def datePlusOne = udf((date: String) => {
         var formatter: DateTimeFormatter  = DateTimeFormat.forPattern("yyyy-MM-dd")
         var nextDate = formatter.parseDateTime(date).plusDays(1)
@@ -166,15 +167,15 @@ object basetable {
       // create separate time variables
       df = df
         .withColumn("TimeStamp", from_unixtime(col("aggregation")))
+        .withColumn("date", substring(col("TimeStamp"), 1, 10))
         .withColumn("hours", substring(col("TimeStamp"), 12, 2).cast("Int"))
         .withColumn("quarter", substring(col("TimeStamp"), 16, 1).cast("Int"))
-        .withColumn("date", substring(col("TimeStamp"), 1, 10))
-        .withColumn("isWeekDay", (helper.isWeekDay(col("date")) <= 5).cast("Int"))
         .withColumn("dayOfWeek", helper.isWeekDay(col("date")))
-        .withColumn("isDaytime", (col("hours") >= 6 && col("hours") <= 18).cast("Int"))
-        .withColumn("isWorktime", (col("hours") >= 9 && col("hours") <= 17).cast("Int"))
+        .withColumn("isWeekDay", (helper.isWeekDay(col("date")) <= 5).cast("Int"))
+        .withColumn("isWorktime1", (col("hours") >= 6 && col("hours") <= 18).cast("Int"))
+        .withColumn("isWorktim2", (col("hours") >= 9 && col("hours") <= 17).cast("Int"))
+        .withColumn("isWorktime3", (col("hours") >= 8 && col("hours") <= 18).cast("Int"))
         .withColumn("isNight", (col("hours") <= 6).cast("Int"))
-        .withColumn("isWorktime2", (col("hours") >= 8 && col("hours") <= 18).cast("Int"))
         .withColumn("isIrrational", helper.isIrrational(col("AvailabilityZone"), col("InstanceType"), col("spotPrice")).cast("Integer"))
 
       // make sure changes to columns are correct
