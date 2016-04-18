@@ -410,17 +410,12 @@ object rfRegression {
 
 object statistics {
   def main(args: Array[String]) {
-    val conf = new SparkConf().setAppName("SpotPriceAnalysis").setMaster("local[2]")
-    val sc = new SparkContext(conf)
-    val sqlContext = new org.apache.spark.sql.hive.HiveContext(sc)
     // should be for all three
     val df = helper.loadBasetable(15)
 
     //instead of making this array, make use of the columns command, returns all the columns
-    val features = Array("spotPrice", "priceChange", "priceChangeLag1", "priceChangeLag2", "isIrrational", "t1", "t2", "t3", "stddev", "isVolatile" , "hours", "quarter", "isWeekDay", "isDaytime")
+    val features = df.columns
 
-    df.show()
-    df.printSchema()
     // Statistics
 
     // datapoint per availabilityZone - instanceType pair
@@ -451,5 +446,7 @@ object statistics {
     irrationalFreq.show()
 
     correlations.foreach (println)
+
+    df.printSchema()
   }
 }
