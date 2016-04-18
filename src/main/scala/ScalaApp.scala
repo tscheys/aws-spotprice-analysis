@@ -221,6 +221,11 @@ object basetable {
       df = helper.dailyStats(df)
       df.show()
 
+      df = df
+        .withColumn("isVolatile", (col("priceChange") > (col("stddev") * 2)).cast("Int"))
+        .withColumnRenamed("date1", "date")
+        .na.fill(0.0, Seq("priceChange" ,"futurePrice"))
+
       // get rid of temporary cols
       df = df
         .drop("increaseTemp")
