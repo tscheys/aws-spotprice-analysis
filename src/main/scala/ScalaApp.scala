@@ -193,7 +193,7 @@ object basetable {
         .withColumn("diffMeanSpot", col("spotPrice") - col("avg(spotPrice)"))
         .withColumn("diffMeanChange", abs(col("priceChange") - col("avg(priceChange)")))
 
-      var deviations = df.groupBy("AvailabilityZone", "InstanceType", "date").agg(stddev("priceChange"))
+      var deviations = df.groupBy("availabilityZone", "instanceType", "date").agg(stddev("priceChange"))
       deviations = deviations
         .withColumnRenamed("stddev_samp(priceChange,0,0)", "stddev")
 
@@ -203,10 +203,12 @@ object basetable {
       var average = deviations.na.drop().select(avg("stddev")).head()
       // fill average when deviation was NaN
       deviations = deviations.na.fill(average.getDouble(0), Seq("stddev"))
-      //deviations.show()
+      println("####DEVIATIONS")
+      deviations.show()
+      println("####BASETABLE")
+      df.show()
 
       // join deviations and df
-
       df = df
         .join(deviations, Seq("availabilityZone", "instanceType", "date"))
 
@@ -217,7 +219,7 @@ object basetable {
       df = df.na.fill(0.0, Seq("priceChange", "increase", "decrease", "same" ,"futurePrice", "isVolatile"))
 
       // check final basetable
-      df.orderBy("AvailabilityZone", "InstanceType", "aggregation").show(400)
+      df.orderBy("availabilityZone", "instanceType", "aggregation").show(400)
       df.printSchema()
 
       // save basetable to csv
