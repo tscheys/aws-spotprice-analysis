@@ -17,10 +17,10 @@ import org.joda.time.format.DateTimeFormatter._
 
 // ML
 import org.apache.spark.ml.Pipeline
-import org.apache.spark.ml.classification.{RandomForestClassificationModel, RandomForestClassifier}
-import org.apache.spark.ml.evaluation.{MulticlassClassificationEvaluator, RegressionEvaluator}
-import org.apache.spark.ml.feature.{IndexToString, StringIndexer, VectorIndexer, VectorAssembler, Binarizer}
-import org.apache.spark.ml.regression.{RandomForestRegressor, RandomForestRegressionModel}
+import org.apache.spark.ml.classification.{ RandomForestClassificationModel, RandomForestClassifier }
+import org.apache.spark.ml.evaluation.{ MulticlassClassificationEvaluator, RegressionEvaluator }
+import org.apache.spark.ml.feature.{ IndexToString, StringIndexer, VectorIndexer, VectorAssembler, Binarizer }
+import org.apache.spark.ml.regression.{ RandomForestRegressor, RandomForestRegressionModel }
 
 //spark submit command:
 //spark-submit --class "basetable" --master "local[2]" --packages "com.databricks:spark-csv_2.11:1.4.0,joda-time:joda-time:2.9.3" target/scala-2.11/sample-project_2.11-1.0.jar
@@ -37,99 +37,99 @@ object helper {
 
   // HELPER FUNCTIONS FOR BASETABLE
   def isWeekDay = udf((date: String) => {
-        var formatter: DateTimeFormatter  = DateTimeFormat.forPattern("yyyy-MM-dd")
-        formatter.parseDateTime(date).dayOfWeek().get
-      })
+    var formatter: DateTimeFormatter = DateTimeFormat.forPattern("yyyy-MM-dd")
+    formatter.parseDateTime(date).dayOfWeek().get
+  })
 
-  def aggregate(split: Int) = udf((date:String, hours: Int, minutes: Int) => {
-        // aggregate datapoints on 15, 30 or 60 minute intervals
+  def aggregate(split: Int) = udf((date: String, hours: Int, minutes: Int) => {
+    // aggregate datapoints on 15, 30 or 60 minute intervals
 
-        // initialize variable to be re-assigned a value in pattern matching
-        var group = 0
+    // initialize variable to be re-assigned a value in pattern matching
+    var group = 0
 
-        split match {
-          // split the data every 15, 30 or 60 minutes
-          case 15 => minutes match {
-            // reassign all minutes to one specific minute in one of 4 quarters, so they can later be grouped
-            case x if x < 15 => group = 1
-            case x if x >= 15 && x < 30 => group = 2
-            case x if x >= 30 && x < 45 => group = 3
-            case x => group = 4
-            }
-          case 30 => minutes match {
-            case x if x < 30 => group = 1
-            case x if x >= 30 => group = 2
-          }
-          case 60 => group = 1
-        }
-
-        // create string ready for unix_TimeStamp conversion
-        // minutes in this unix are meaningless, since we use the group variable to perform a .groupby().mean("spotPrice") on the aggregation column
-        date + " " + hours + ":" + group + ":" + "00"
-
-      })
-
-      def isIrrational = udf((zone: String, instance: String, price: Double) => {
-        // remove subregion reference a, b, c
-        val region  = zone.dropRight(1)
-
-        // check if spot price >= on-demand price
-        region match {
-          case x if x == "eu-west-1" || x == "us-west-2" => instance match {
-            case x if x == "m1.medium" => price >= M1_EU_US
-            case x if x == "c3.large" => price >= C3_EU_US
-            case x if x == "g2.2xlarge" => price >= G2_EU_US
-          }
-          case x if x == "ap-southeast-1" => instance match {
-            case x if x == "m1.medium" => price >= M1_AP
-            case x if x == "c3.large" => price >= C3_AP
-            case x if x == "g2.2xlarge" => price >= G2_AP
-          }
-        }
-      })
-
-      // create column with date + 1 day (we want stats of 1st january to be used on 2nd of january)
-      def datePlusOne = udf((date: String) => {
-        var formatter: DateTimeFormatter  = DateTimeFormat.forPattern("yyyy-MM-dd")
-        var nextDate = formatter.parseDateTime(date).plusDays(1)
-        formatter.print(nextDate)
-      })
-
-      def dailyStats = (data: DataFrame) => {
-        var df = data
-        var dailies = df.groupBy("availabilityZone", "instanceType","date").agg(avg("spotPrice" ),max("spotPrice"), min("spotPrice"), avg("priceChange"), max("priceChange"), min("priceChange"), stddev("priceChange"))
-
-        dailies = dailies
-          .withColumn("date", datePlusOne(col("date")))
-        dailies.show()
-        dailies.printSchema()
-        df = df
-          .join(dailies, Seq("availabilityZone", "instanceType" ,"date"))
-          .withColumn("diffMeanSpot", col("spotPrice") - col("avg(spotPrice)"))
-          .withColumn("diffMeanChange", abs(col("priceChange") - col("avg(priceChange)")))
-          .withColumnRenamed("stddev_samp(priceChange,0,0)", "stddev")
-
-        // take care of missing stddevs
-        var average = df.na.drop().select(avg("stddev")).head()
-        df.na.fill(average.getDouble(0), Seq("stddev"))
-
+    split match {
+      // split the data every 15, 30 or 60 minutes
+      case 15 => minutes match {
+        // reassign all minutes to one specific minute in one of 4 quarters, so they can later be grouped
+        case x if x < 15 => group = 1
+        case x if x >= 15 && x < 30 => group = 2
+        case x if x >= 30 && x < 45 => group = 3
+        case x => group = 4
       }
-
-      // load a basetable with a certain interval
-      def loadBasetable = (interval: Int) => {
-        getContext
-          .read
-          .format("com.databricks.spark.csv")
-          .option("header", "true") // Use first line of all files as header
-          .option("inferSchema", "true") // Automatically infer data types
-          .load("../thesis-data/basetable" + interval +".csv")
+      case 30 => minutes match {
+        case x if x < 30 => group = 1
+        case x if x >= 30 => group = 2
       }
+      case 60 => group = 1
+    }
 
-      def getContext = {
-        val conf = new SparkConf().setAppName("SpotPriceAnalysis").setMaster("local[2]")
-        val sc = new SparkContext(conf)
-        new org.apache.spark.sql.hive.HiveContext(sc)
+    // create string ready for unix_TimeStamp conversion
+    // minutes in this unix are meaningless, since we use the group variable to perform a .groupby().mean("spotPrice") on the aggregation column
+    date + " " + hours + ":" + group + ":" + "00"
+
+  })
+
+  def isIrrational = udf((zone: String, instance: String, price: Double) => {
+    // remove subregion reference a, b, c
+    val region = zone.dropRight(1)
+
+    // check if spot price >= on-demand price
+    region match {
+      case x if x == "eu-west-1" || x == "us-west-2" => instance match {
+        case x if x == "m1.medium" => price >= M1_EU_US
+        case x if x == "c3.large" => price >= C3_EU_US
+        case x if x == "g2.2xlarge" => price >= G2_EU_US
       }
+      case x if x == "ap-southeast-1" => instance match {
+        case x if x == "m1.medium" => price >= M1_AP
+        case x if x == "c3.large" => price >= C3_AP
+        case x if x == "g2.2xlarge" => price >= G2_AP
+      }
+    }
+  })
+
+  // create column with date + 1 day (we want stats of 1st january to be used on 2nd of january)
+  def datePlusOne = udf((date: String) => {
+    var formatter: DateTimeFormatter = DateTimeFormat.forPattern("yyyy-MM-dd")
+    var nextDate = formatter.parseDateTime(date).plusDays(1)
+    formatter.print(nextDate)
+  })
+
+  def dailyStats = (data: DataFrame) => {
+    var df = data
+    var dailies = df.groupBy("availabilityZone", "instanceType", "date").agg(avg("spotPrice"), max("spotPrice"), min("spotPrice"), avg("priceChange"), max("priceChange"), min("priceChange"), stddev("priceChange"))
+
+    dailies = dailies
+      .withColumn("date", datePlusOne(col("date")))
+    dailies.show()
+    dailies.printSchema()
+    df = df
+      .join(dailies, Seq("availabilityZone", "instanceType", "date"))
+      .withColumn("diffMeanSpot", col("spotPrice") - col("avg(spotPrice)"))
+      .withColumn("diffMeanChange", abs(col("priceChange") - col("avg(priceChange)")))
+      .withColumnRenamed("stddev_samp(priceChange,0,0)", "stddev")
+
+    // take care of missing stddevs
+    var average = df.na.drop().select(avg("stddev")).head()
+    df.na.fill(average.getDouble(0), Seq("stddev"))
+
+  }
+
+  // load a basetable with a certain interval
+  def loadBasetable = (interval: Int) => {
+    getContext
+      .read
+      .format("com.databricks.spark.csv")
+      .option("header", "true") // Use first line of all files as header
+      .option("inferSchema", "true") // Automatically infer data types
+      .load("../thesis-data/basetable" + interval + ".csv")
+  }
+
+  def getContext = {
+    val conf = new SparkConf().setAppName("SpotPriceAnalysis").setMaster("local[2]")
+    val sc = new SparkContext(conf)
+    new org.apache.spark.sql.hive.HiveContext(sc)
+  }
 }
 
 // main class
@@ -148,8 +148,8 @@ object basetable {
       // create time variables
       df = df
         .withColumn("date", substring(col("TimeStamp"), 0, 10))
-        .withColumn("hours", substring(col("TimeStamp"), 12,2).cast("Int"))
-        .withColumn("minutes", substring(col("TimeStamp"), 15,2).cast("Int"))
+        .withColumn("hours", substring(col("TimeStamp"), 12, 2).cast("Int"))
+        .withColumn("minutes", substring(col("TimeStamp"), 15, 2).cast("Int"))
 
       // aggregate data (interpolation)
 
@@ -160,7 +160,7 @@ object basetable {
 
       // take mean over fixed time interval chosen in aggregate() function
       df = df
-        .groupBy("AvailabilityZone", "InstanceType","aggregation").mean("spotPrice").sort("AvailabilityZone", "InstanceType", "aggregation")
+        .groupBy("AvailabilityZone", "InstanceType", "aggregation").mean("spotPrice").sort("AvailabilityZone", "InstanceType", "aggregation")
       df = df
         .withColumnRenamed("avg(spotPrice)", "spotPrice")
 
@@ -226,7 +226,7 @@ object basetable {
 
       df = df
         .withColumn("isVolatile", (col("priceChange") > (col("stddev") * 2)).cast("Int"))
-        .na.fill(0.0, Seq("priceChange" ,"futurePrice"))
+        .na.fill(0.0, Seq("priceChange", "futurePrice"))
 
       // get rid of temporary cols
       df = df
@@ -236,12 +236,12 @@ object basetable {
 
       // write to csv file
       df.write.format("com.databricks.spark.csv")
-       .option("header", "true")
-       .mode(SaveMode.Overwrite)
-       .save("../thesis-data/basetable" + interval + ".csv")
+        .option("header", "true")
+        .mode(SaveMode.Overwrite)
+        .save("../thesis-data/basetable" + interval + ".csv")
 
-     //debug
-     df.printSchema()
+      //debug
+      df.printSchema()
     }
 
     // invoke basetableMaker() for every interval
@@ -328,7 +328,7 @@ object rfClassifier {
         .setMetricName("precision")
       val accuracy = evaluator.evaluate(predictions)
 
-      val results  = model.stages(2)
+      val results = model.stages(2)
       val importances = results.asInstanceOf[RandomForestClassificationModel].featureImportances
 
       //val rfModel = model.stages(2).asInstanceOf[RandomForestClassificationModel]
@@ -338,18 +338,18 @@ object rfClassifier {
     }
 
     // define features
-    val allFeatures = Array("spotPrice", "priceChange", "priceChangeLag1", "priceChangeLag2", "isIrrational", "t1", "t2", "t3", "stddev", "isVolatile" , "hours", "quarter", "isWeekDay", "isDaytime")
-    val features = Array("spotPrice", "priceChange", "hours", "quarter", "isWeekDay", "isDaytime" )
+    val allFeatures = Array("spotPrice", "priceChange", "priceChangeLag1", "priceChangeLag2", "isIrrational", "t1", "t2", "t3", "stddev", "isVolatile", "hours", "quarter", "isWeekDay", "isDaytime")
+    val features = Array("spotPrice", "priceChange", "hours", "quarter", "isWeekDay", "isDaytime")
     val featuresAfterImp = Array("spotPrice", "priceChange", "hours", "isWeekDay")
     // , "priceChangeLag1", "priceChangeLag2"
     val labels = Array("increase", "decrease", "same")
 
-    val couples = Array(Array("us-west-2a", "m1.medium" ), Array("ap-southeast-1a", "c3.large"),Array("us-west-2b", "c3.large"))
+    val couples = Array(Array("us-west-2a", "m1.medium"), Array("ap-southeast-1a", "c3.large"), Array("us-west-2b", "c3.large"))
 
     // return accuracies for each basetable
     val accuracies = for (basetable <- basetables) yield {
       // for each basetable, try out different couples
-      for (couple <- couples) yield  "zone" + couple(0) + " instance " + couple(1) + ":" +  rfClassifier(basetable, labels(0), allFeatures  , couple(0), couple(1))
+      for (couple <- couples) yield "zone" + couple(0) + " instance " + couple(1) + ":" + rfClassifier(basetable, labels(0), allFeatures, couple(0), couple(1))
     }
 
     println("Report on Random Forest classifier (no trees: " + NUM_TREES + ")")
@@ -357,7 +357,7 @@ object rfClassifier {
     println("for intervals")
     INTERVALS.foreach(println)
     println("Test error = 1 - accuracy")
-    accuracies.foreach(x => x.foreach (println))
+    accuracies.foreach(x => x.foreach(println))
 
   }
 }
@@ -378,8 +378,8 @@ object rfRegression {
       var df = data.filter("InstanceType = 'm1.medium'").filter("AvailabilityZone = 'us-west-2a'")
 
       val assembler = new VectorAssembler()
-      .setInputCols(Array("spotPrice", "priceChange", "hours", "quarter", "isWeekDay", "isDaytime"))
-      .setOutputCol("features")
+        .setInputCols(Array("spotPrice", "priceChange", "hours", "quarter", "isWeekDay", "isDaytime"))
+        .setOutputCol("features")
 
       // prepare variables for random forest
       df = assembler.transform(df)
@@ -426,7 +426,7 @@ object rfRegression {
 
     val RMSE = for (basetable <- basetables) yield rfRegression(basetable)
 
-    RMSE.foreach {println}
+    RMSE.foreach { println }
 
   }
 }
@@ -443,39 +443,53 @@ object statistics {
 
     // datapoint per availabilityZone - instanceType pair
     df.groupBy("availabilityZone", "instanceType").count.coalesce(1)
-     .write.format("com.databricks.spark.csv")
-     .option("header", "true")
-     .mode(SaveMode.Overwrite)
-     .save("../thesis-data/obsPerCouple.csv")
+      .write.format("com.databricks.spark.csv")
+      .option("header", "true")
+      .mode(SaveMode.Overwrite)
+      .save("../thesis-data/obsPerCouple.csv")
 
     println("### DATA QUALITY CHECKS")
     println("#### ALL COLUMNS HAVE CORRECT TYPE")
     df.printSchema()
     df.show()
 
-    println("#### WE HAVE 8 AZs")
     var azs = df.select("availabilityZone").distinct()
     var instances = df.select("instanceType").distinct()
-    var couples = df.select("availabilityZone","instanceType").distinct()
+    var couples = df.select("availabilityZone", "instanceType").distinct()
+
+    // do reporting on asz and instances
+    println("#### WE HAVE 8 AZs")
     println("Number of Availability Zones: " + azs.count)
-    println("list: /n" + azs.show())
+    println("list: /n " + azs.show())
     println("#### WE HAVE 3 InstanceTypes")
-    println("Number of Instances: /n" + instances.count)
-    println("list: /n" + instances.show() )
-    println("#### WE HAVE 3 InstanceType in each of the 3 AZ's")
+    println("Number of Instances: /n " + instances.count)
+    println("list: /n " + instances.show())
+    println("#### WE HAVE 3 InstanceType in each of the 8 AZ's (24)")
     println("Number of Instance-AZ combinations: " + couples.count)
-    println("list: /n" + couples.show() )
-    println("#### CHECK IF DAILY STATISTICS WORKS")
+    println("list: /n " + couples.show())
+
+    println("#### DAILY STATISTICS SHOULD CALCULATE STATISTICS FROM PREVIOUS DAY")
 
     // select certain instance in certain az on a certain date
-
+    var averageCheck = df.filter("availabilityZone = 'us-west-2a'").filter("instanceType = 'm1.medium'").filter("date = '2016-02-12'")
+    averageCheck = averageCheck.select("spotPrice")
+    averageCheck.show()
     // calculate average on that date
+    var ourAverage = averageCheck.agg(avg("spotPrice")).head.getDouble(0)
     // select same instance in same az on that date + 1 day
+    var lookupAverage = df.filter("availabilityZone = 'us-west-2a'").filter("instanceType = 'm1.medium'").filter("date = '2016-02-13'").select("avg(spotPrice)").head.getDouble(0)
     // check if average 1 equals average 2
+    println("number 1 = " + ourAverage + "/n" + "number 2 = " + lookupAverage)
+
+    println("#### PRICECHANGE SHOULD BE DIFFERENCE BETWEEN SP at time T and SP at time T + 1")
+
+    // spotprice row 2
+    // get row right in front of that row
+    // get row right after that row
 
     // calculate correlations between features and label
-   //var correlations = for (feature <- features) yield  feature + ": " +  df.stat.corr(feature, "increase")
-
+    //var correlations = for (feature <- features) yield  feature + ": " +  df.stat.corr(feature, "increase")
+    /*
    df.groupBy("availabilityZone", "instanceType").avg("priceChange").coalesce(1)
      .write.format("com.databricks.spark.csv")
      .option("header", "true")
@@ -489,7 +503,7 @@ object statistics {
     volatileFreq.show()
     println("number of irrational obs")
     irrationalFreq.show()
-
+*/
     //correlations.foreach (println)
   }
 }
