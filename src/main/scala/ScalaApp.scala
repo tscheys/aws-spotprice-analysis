@@ -203,6 +203,10 @@ object basetable {
       var average = deviations.na.drop().select(avg("stddev")).head()
       // fill average when deviation was NaN
       deviations = deviations.na.fill(average.getDouble(0), Seq("stddev"))
+      deviations = deviations
+        .withColumnRenamed("date", "date1")
+      df = df
+        .withColumnRenamed("date", "date1")
       println("####DEVIATIONS")
       deviations.show()
       println("####BASETABLE")
@@ -210,7 +214,7 @@ object basetable {
 
       // join deviations and df
       df = df
-        .join(deviations, Seq("availabilityZone", "instanceType", "date"))
+        .join(deviations, Seq("availabilityZone", "instanceType", "date1"))
 
       df = df
         .withColumn("isVolatile", (col("priceChange") > (col("stddev") * 2)).cast("Int"))
@@ -235,6 +239,7 @@ object basetable {
 
 object rfClassifier {
   def main(args: Array[String]) {
+
     val conf = new SparkConf().setAppName("SpotPriceAnalysis").setMaster("local[2]")
     val sc = new SparkContext(conf)
     val sqlContext = new org.apache.spark.sql.hive.HiveContext(sc)
