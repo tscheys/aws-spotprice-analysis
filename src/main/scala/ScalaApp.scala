@@ -41,7 +41,7 @@ object helper {
         formatter.parseDateTime(date).dayOfWeek().get
       })
 
-      def aggregate(split: Int) = udf((date:String, hours: Int, minutes: Int) => {
+  def aggregate(split: Int) = udf((date:String, hours: Int, minutes: Int) => {
         // aggregate datapoints on 15, 30 or 60 minute intervals
 
         // initialize variable to be re-assigned a value in pattern matching
@@ -68,6 +68,7 @@ object helper {
         date + " " + hours + ":" + group + ":" + "00"
 
       })
+
       def isIrrational = udf((zone: String, instance: String, price: Double) => {
         // remove subregion reference a, b, c
         val region  = zone.dropRight(1)
@@ -86,21 +87,30 @@ object helper {
           }
         }
       })
+
+      // load a basetable with a certain interval
+      def loadBasetable = (interval: Int) => {
+        getContext
+          .read
+          .format("com.databricks.spark.csv")
+          .option("header", "true") // Use first line of all files as header
+          .option("inferSchema", "true") // Automatically infer data types
+          .load("../thesis-data/basetable" + interval +".csv")
+      }
+
+      def getContext = {
+        val conf = new SparkConf().setAppName("SpotPriceAnalysis").setMaster("local[2]")
+        val sc = new SparkContext(conf)
+        new org.apache.spark.sql.hive.HiveContext(sc)
+      }
 }
 
 // main class
 object basetable {
   def main(args: Array[String]) {
-    val conf = new SparkConf().setAppName("SpotPriceAnalysis").setMaster("local[2]")
-    val sc = new SparkContext(conf)
-    val sqlContext = new org.apache.spark.sql.hive.HiveContext(sc)
+    val sqlContext = helper.getContext
     val df = sqlContext.read.json("/Users/tscheys/ScalaApp/aws.json")
-
     val INTERVALS = Seq(60)
-
-    // HELPER FUNCTIONS
-
-    // create binary for weekday/weekend
 
     // makes basetable for different time aggregation intervals
     // we will call this function 3 times: for 15, 30 and 60 minutes
@@ -179,6 +189,7 @@ object basetable {
       df.show(400)
       df.printSchema()
 
+      // get statistics avg, max, min, stddev
       // calculate avg, max, min, stddev of previous day
       var dailies = df.groupBy("availabilityZone", "instanceType","date").agg(avg("spotPrice" ),max("spotPrice"), min("spotPrice"), avg("priceChange"), max("priceChange"), min("priceChange"))
 
@@ -246,25 +257,11 @@ object basetable {
 object rfClassifier {
   def main(args: Array[String]) {
 
-    val conf = new SparkConf().setAppName("SpotPriceAnalysis").setMaster("local[2]")
-    val sc = new SparkContext(conf)
-    val sqlContext = new org.apache.spark.sql.hive.HiveContext(sc)
-
     //define time intervals
     val INTERVALS = Seq(60)
-    val NUM_TREES = 200
+    val NUM_TREES = 10
 
-    // load a basetable with a certain interval
-    def loadBasetable = (interval: Int) => {
-      sqlContext
-        .read
-        .format("com.databricks.spark.csv")
-        .option("header", "true") // Use first line of all files as header
-        .option("inferSchema", "true") // Automatically infer data types
-        .load("../thesis-data/basetable" + interval +".csv")
-    }
-
-    val basetables = for (interval <- INTERVALS) yield loadBasetable(interval)
+    val basetables = for (interval <- INTERVALS) yield helper.loadBasetable(interval)
 
     //check if loaded correctly into array
     basetables(0).show()
@@ -372,31 +369,17 @@ object rfClassifier {
 object rfRegression {
   def main(args: Array[String]) {
 
-    // LOAD CSV WITH BASETABLE
-    val conf = new SparkConf().setAppName("SpotPriceAnalysis").setMaster("local[2]")
-    val sc = new SparkContext(conf)
-    val sqlContext = new org.apache.spark.sql.hive.HiveContext(sc)
-
     //define time intervals
-    var INTERVALS = Seq(15,30,60)
+    var INTERVALS = Seq(60)
 
-    // load a basetable with a certain interval
-    def loadBasetable = (interval: Int) => {
-      sqlContext
-        .read
-        .format("com.databricks.spark.csv")
-        .option("header", "true") // Use first line of all files as header
-        .option("inferSchema", "true") // Automatically infer data types
-        .load("../thesis-data/basetable" + interval +".csv")
-    }
-
-    val basetables = for (interval <- INTERVALS) yield loadBasetable(interval)
+    val basetables = for (interval <- INTERVALS) yield helper.loadBasetable(interval)
 
     // START RF REGRESSION
     def rfRegression = (data: DataFrame) => {
 
       // subset dataset for m1.medium and us-west-2a
-      var df = data.filter("InstanceType == m1.medium").filter("AvailabilityZone == us-west-2a")
+      // TODO: investigate whether this can be done with one filter function and is this faster ?
+      var df = data.filter("InstanceType = 'm1.medium'").filter("AvailabilityZone = 'us-west-2a'")
 
       val assembler = new VectorAssembler()
       .setInputCols(Array("spotPrice", "priceChange", "hours", "quarter", "isWeekDay", "isDaytime"))
@@ -457,12 +440,10 @@ object statistics {
     val conf = new SparkConf().setAppName("SpotPriceAnalysis").setMaster("local[2]")
     val sc = new SparkContext(conf)
     val sqlContext = new org.apache.spark.sql.hive.HiveContext(sc)
-    val df = sqlContext.read
-      .format("com.databricks.spark.csv")
-      .option("header", "true") // Use first line of all files as header
-      .option("inferSchema", "true") // Automatically infer data types
-      .load("../thesis-data/basetable15.csv")
+    // should be for all three
+    val df = helper.loadBasetable(15)
 
+    //instead of making this array, make use of the columns command, returns all the columns
     val features = Array("spotPrice", "priceChange", "priceChangeLag1", "priceChangeLag2", "isIrrational", "t1", "t2", "t3", "stddev", "isVolatile" , "hours", "quarter", "isWeekDay", "isDaytime")
 
     df.show()
