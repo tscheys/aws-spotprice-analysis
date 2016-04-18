@@ -208,7 +208,7 @@ object basetable {
       // join deviations and df
 
       df = df
-        .join(deviations, Seq("AvailabilityZone", "InstanceType", "date"))
+        .join(deviations, Seq("availabilityZone", "instanceType", "date"))
 
       df = df
         .withColumn("isVolatile", (col("priceChange") > (col("stddev") * 2)).cast("Int"))
