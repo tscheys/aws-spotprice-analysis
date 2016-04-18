@@ -453,12 +453,18 @@ object statistics {
     df.printSchema()
     df.show()
 
-    println("#### WE HAVE 3 AZs")
-    println("Number of Availability Zones: " + df.select("availabilityZone").distinct().count())
+    println("#### WE HAVE 8 AZs")
+    var azs = df.select("availabilityZone").distinct()
+    var instances = df.select("instanceType").distinct()
+    var couples = df.select("availabilityZone","instanceType").distinct()
+    println("Number of Availability Zones: " + azs.count)
+    println("list: /n" + azs.show())
     println("#### WE HAVE 3 InstanceTypes")
-    println("Number of Instances: " + df.select("instanceType").distinct().count())
+    println("Number of Instances: /n" + instances.count)
+    println("list: /n" + instances.show() )
     println("#### WE HAVE 3 InstanceType in each of the 3 AZ's")
-    println("Number of Instance-AZ combinations: " + df.select("availabilityZone","instanceType").distinct().count())
+    println("Number of Instance-AZ combinations: " + couples.count)
+    println("list: /n" + couples.show() )
     println("#### CHECK IF DAILY STATISTICS WORKS")
 
     // select certain instance in certain az on a certain date
