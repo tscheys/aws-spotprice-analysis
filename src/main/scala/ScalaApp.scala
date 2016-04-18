@@ -219,21 +219,6 @@ object basetable {
       // calculate avg, max, min, stddev of previous day
       df = helper.dailyStats(df)
       df.show()
-      /*
-      df = df
-        .withColumn("isVolatile", (col("priceChange") > (col("stddev") * 2)).cast("Int"))
-        .withColumnRenamed("date1", "date")
-
-      // impute na's
-      df = df.na.fill(0.0, Seq("priceChange", "increase", "decrease", "same" ,"futurePrice", "isVolatile"))
-
-      // check final basetable
-      df.orderBy("availabilityZone", "instanceType", "aggregation").show(400)
-      df.printSchema()
-
-      // save basetable to csv
-      df.write.format("com.databricks.spark.csv").option("header", "true").mode(SaveMode.Overwrite).save("/Users/tscheys/thesis-data/basetable" + interval + ".csv")
-      * */
     }
 
     // invoke basetableMaker() for every interval
