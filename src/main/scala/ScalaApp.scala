@@ -449,13 +449,20 @@ object statistics {
      .save("../thesis-data/obsPerCouple.csv")
 
     println("### DATA QUALITY CHECKS")
-    println("#### CHECK IF ALL COLUMNS HAVE CORRECT TYPE")
+    println("#### ALL COLUMNS HAVE CORRECT TYPE")
     df.printSchema()
     df.show()
 
+    println("#### WE HAVE 3 AZs")
+    println("Number of Availability Zones: " + df.select("availabilityZone").distinct().count())
+    println("#### WE HAVE 3 InstanceTypes")
+    println("Number of Instances: " + df.select("instanceType").distinct().count())
+    println("#### WE HAVE 3 InstanceType in each of the 3 AZ's")
+    println("Number of Instance-AZ combinations: " + df.select("availabilityZone","instanceType").distinct().count())
     println("#### CHECK IF DAILY STATISTICS WORKS")
 
     // select certain instance in certain az on a certain date
+
     // calculate average on that date
     // select same instance in same az on that date + 1 day
     // check if average 1 equals average 2
