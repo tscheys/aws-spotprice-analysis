@@ -215,10 +215,9 @@ object basetable {
         .withColumn("same", col("same").cast("Integer"))
 
       // remove null rows created by performing a lead
-      df.na.drop()
+      // TODO: how many rows do we omit by doing this ?
+      df = df.na.drop()
       // check if lag() was done correctly
-      df.show(400)
-      df.printSchema()
 
       // get statistics avg, max, min, stddev
       // calculate avg, max, min, stddev of previous day
@@ -227,7 +226,6 @@ object basetable {
 
       df = df
         .withColumn("isVolatile", (col("priceChange") > (col("stddev") * 2)).cast("Int"))
-        .withColumnRenamed("date1", "date")
         .na.fill(0.0, Seq("priceChange" ,"futurePrice"))
 
       // get rid of temporary cols
@@ -241,6 +239,9 @@ object basetable {
        .option("header", "true")
        .mode(SaveMode.Overwrite)
        .save("../thesis-data/basetable" + interval + ".csv")
+
+     //debug
+     df.printSchema()
     }
 
     // invoke basetableMaker() for every interval
@@ -447,8 +448,17 @@ object statistics {
      .mode(SaveMode.Overwrite)
      .save("../thesis-data/obsPerCouple.csv")
 
+    println("### DATA QUALITY CHECKS")
+    println("#### CHECK IF ALL COLUMNS HAVE CORRECT TYPE")
     df.printSchema()
     df.show()
+
+    println("#### CHECK IF DAILY STATISTICS WORKS")
+
+    // select certain instance in certain az on a certain date
+    // calculate average on that date
+    // select same instance in same az on that date + 1 day
+    // check if average 1 equals average 2
 
     // calculate correlations between features and label
    //var correlations = for (feature <- features) yield  feature + ": " +  df.stat.corr(feature, "increase")
@@ -468,10 +478,5 @@ object statistics {
     irrationalFreq.show()
 
     //correlations.foreach (println)
-
-    //Data quality checks
-
-    // are types of all variables correct ?
-    df.printSchema()
   }
 }
