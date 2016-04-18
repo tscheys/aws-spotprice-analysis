@@ -198,9 +198,9 @@ object basetable {
         .withColumn("priceChange", col("spotPrice") - col("t1"))
         .withColumn("priceChangeLag1", col("t1") - col("t2"))
         .withColumn("priceChangeLag2", col("t2") - col("t3"))
-        .withColumn("increaseTemp", (col("priceChange") > 0).cast("Double"))
-        .withColumn("decreaseTemp", (col("priceChange") < 0).cast("Double"))
-        .withColumn("sameTemp", (col("priceChange") === 0).cast("Double"))
+        .withColumn("increaseTemp", (col("priceChange") > 0).cast("Int"))
+        .withColumn("decreaseTemp", (col("priceChange") < 0).cast("Int"))
+        .withColumn("sameTemp", (col("priceChange") === 0).cast("Int"))
 
       df.registerTempTable("labelData")
       df = sqlContext.sql("""SELECT a.*, lead(a.increaseTemp) OVER (PARTITION BY a.AvailabilityZone, a.InstanceType ORDER BY a.aggregation) AS increase,
@@ -219,6 +219,12 @@ object basetable {
       // calculate avg, max, min, stddev of previous day
       df = helper.dailyStats(df)
       df.show()
+
+      // get rid of temporary cols
+      df = df
+        .drop("increaseTemp")
+        .drop("decreaseTemp")
+        .drop("sameTemp")
     }
 
     // invoke basetableMaker() for every interval
@@ -411,7 +417,7 @@ object rfRegression {
 object statistics {
   def main(args: Array[String]) {
     // should be for all three
-    val df = helper.loadBasetable(15)
+    val df = helper.loadBasetable(60)
 
     //instead of making this array, make use of the columns command, returns all the columns
     val features = df.columns
@@ -429,7 +435,7 @@ object statistics {
     df.show()
 
     // calculate correlations between features and label
-   var correlations = for (feature <- features) yield  feature + ": " +  df.stat.corr(feature, "increase")
+   //var correlations = for (feature <- features) yield  feature + ": " +  df.stat.corr(feature, "increase")
 
    df.groupBy("availabilityZone", "instanceType").avg("priceChange").coalesce(1)
      .write.format("com.databricks.spark.csv")
@@ -445,8 +451,11 @@ object statistics {
     println("number of irrational obs")
     irrationalFreq.show()
 
-    correlations.foreach (println)
+    //correlations.foreach (println)
 
+    //Data quality checks
+
+    // are types of all variables correct ?
     df.printSchema()
   }
 }
