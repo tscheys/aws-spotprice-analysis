@@ -23,7 +23,7 @@ import org.apache.spark.ml.feature.{IndexToString, StringIndexer, VectorIndexer,
 import org.apache.spark.ml.regression.{RandomForestRegressor, RandomForestRegressionModel}
 
 //spark submit command:
-// spark-submit --class "basetable" --master "local[2]" --packages "com.databricks:spark-csv_2.11:1.4.0,joda-time:joda-time:2.9.3" target/scala-2.11/sample-project_2.11-1.0.jar
+//spark-submit --class "basetable" --master "local[2]" --packages "com.databricks:spark-csv_2.11:1.4.0,joda-time:joda-time:2.9.3" target/scala-2.11/sample-project_2.11-1.0.jar
 
 // main class
 object basetable {
@@ -207,6 +207,8 @@ object basetable {
         .withColumnRenamed("date", "date1")
       df = df
         .withColumnRenamed("date", "date1")
+
+      // for debugging purposes
       println("####DEVIATIONS")
       deviations.show()
       println("####BASETABLE")
@@ -218,6 +220,7 @@ object basetable {
 
       df = df
         .withColumn("isVolatile", (col("priceChange") > (col("stddev") * 2)).cast("Int"))
+        .withColumnRenamed("date1", "date")
 
       // impute na's
       df = df.na.fill(0.0, Seq("priceChange", "increase", "decrease", "same" ,"futurePrice", "isVolatile"))
@@ -228,7 +231,6 @@ object basetable {
 
       // save basetable to csv
       df.write.format("com.databricks.spark.csv").option("header", "true").mode(SaveMode.Overwrite).save("/Users/tscheys/thesis-data/basetable" + interval + ".csv")
-
     }
 
     // invoke basetableMaker() for every interval
