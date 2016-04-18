@@ -173,7 +173,7 @@ object basetable {
         .withColumn("dayOfWeek", helper.isWeekDay(col("date")))
         .withColumn("isWeekDay", (helper.isWeekDay(col("date")) <= 5).cast("Int"))
         .withColumn("isWorktime1", (col("hours") >= 6 && col("hours") <= 18).cast("Int"))
-        .withColumn("isWorktim2", (col("hours") >= 9 && col("hours") <= 17).cast("Int"))
+        .withColumn("isWorktime2", (col("hours") >= 9 && col("hours") <= 17).cast("Int"))
         .withColumn("isWorktime3", (col("hours") >= 8 && col("hours") <= 18).cast("Int"))
         .withColumn("isNight", (col("hours") <= 6).cast("Int"))
         .withColumn("isIrrational", helper.isIrrational(col("AvailabilityZone"), col("InstanceType"), col("spotPrice")).cast("Integer"))
@@ -226,6 +226,12 @@ object basetable {
         .drop("increaseTemp")
         .drop("decreaseTemp")
         .drop("sameTemp")
+
+      // write to csv file
+      df.write.format("com.databricks.spark.csv")
+       .option("header", "true")
+       .mode(SaveMode.Overwrite)
+       .save("../thesis-data/basetable" + interval + ".csv")
     }
 
     // invoke basetableMaker() for every interval
