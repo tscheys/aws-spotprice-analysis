@@ -131,10 +131,10 @@ object basetable {
         .withColumn("date", substring(col("TimeStamp"), 1, 10))
         .withColumn("isWeekDay", (isWeekDay(col("date")) <= 5).cast("Int"))
         .withColumn("dayOfWeek", isWeekDay(col("date")))
-        .withColumn("isDaytime", (col("hours") >= 6 || col("hours") <= 18).cast("Int"))
-        .withColumn("isWorktime", (col("hours") >= 9 || col("hours") <= 17).cast("Int"))
-        .withColumn("isNight", (col("hours") >= 0 || col("hours") <= 6).cast("Int"))
-        .withColumn("isWorktime", (col("hours") >= 8 || col("hours") <= 18).cast("Int"))
+        .withColumn("isDaytime", (col("hours") >= 6 && col("hours") <= 18).cast("Int"))
+        .withColumn("isWorktime", (col("hours") >= 9 && col("hours") <= 17).cast("Int"))
+        .withColumn("isNight", (col("hours") <= 6).cast("Int"))
+        .withColumn("isWorktime2", (col("hours") >= 8 && col("hours") <= 18).cast("Int"))
         .withColumn("isIrrational", isIrrational(col("AvailabilityZone"), col("InstanceType"), col("spotPrice")).cast("Integer"))
 
       // make sure changes to columns are correct
@@ -176,7 +176,7 @@ object basetable {
       df.printSchema()
 
       // calculate avg, max, min, stddev of previous day
-      var dailies = df.groupBy("date").agg(avg("spotPrice" ),max("spotPrice"), min("spotPrice"), avg("priceChange"), max("priceChange"), min("priceChange"))
+      var dailies = df.groupBy("availabilityZone", "instanceType","date").agg(avg("spotPrice" ),max("spotPrice"), min("spotPrice"), avg("priceChange"), max("priceChange"), min("priceChange"))
 
       // create column with date + 1 day (we want stats of 1st january to be used on 2nd of january)
       def datePlusOne = udf((date: String) => {
@@ -189,18 +189,20 @@ object basetable {
       dailies.show()
       dailies.printSchema()
       df = df
-        .join(dailies, Seq("date"))
+        .join(dailies, Seq("availabilityZone", "instanceType" ,"date"))
+        .withColumn("diffMeanSpot", col("spotPrice") - col("avg(spotPrice)"))
+        .withColumn("diffMeanChange", abs(col("priceChange") - col("avg(priceChange)")))
 
       var deviations = df.groupBy("AvailabilityZone", "InstanceType", "date").agg(stddev("priceChange"))
       deviations = deviations
         .withColumnRenamed("stddev_samp(priceChange,0,0)", "stddev")
 
       df.show()
-      df.printSchema()
-      // calculate average of stddev
-      //var average = deviations.na.drop().select(avg("stddev")).head()
+      //df.printSchema()
+      //calculate average of stddev
+      var average = deviations.na.drop().select(avg("stddev")).head()
       // fill average when deviation was NaN
-      //deviations = deviations.na.fill(average.getDouble(0), Seq("stddev"))
+      deviations = deviations.na.fill(average.getDouble(0), Seq("stddev"))
       //deviations.show()
 
       // join deviations and df
@@ -468,7 +470,6 @@ object statistics {
    var correlations = for (feature <- features) yield  feature + ": " +  df.stat.corr(feature, "increase")
 
    df.groupBy("availabilityZone", "instanceType").avg("priceChange").coalesce(1)
-
      .write.format("com.databricks.spark.csv")
      .option("header", "true")
      .mode(SaveMode.Overwrite)
