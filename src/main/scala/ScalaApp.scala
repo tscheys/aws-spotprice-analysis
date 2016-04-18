@@ -471,6 +471,7 @@ object statistics {
     println("#### DAILY STATISTICS SHOULD CALCULATE STATISTICS FROM PREVIOUS DAY")
 
     // select certain instance in certain az on a certain date
+    /*
     var averageCheck = df.filter("availabilityZone = 'us-west-2a'").filter("instanceType = 'm1.medium'").filter("date = '2016-02-12'")
     averageCheck = averageCheck.select("spotPrice")
     averageCheck.show()
@@ -480,17 +481,50 @@ object statistics {
     var lookupAverage = df.filter("availabilityZone = 'us-west-2a'").filter("instanceType = 'm1.medium'").filter("date = '2016-02-13'").select("avg(spotPrice)").head.getDouble(0)
     // check if average 1 equals average 2
     println("number 1 = " + ourAverage + "/n" + "number 2 = " + lookupAverage)
+    *
+    */
 
     println("#### PRICECHANGE SHOULD BE DIFFERENCE BETWEEN SP at time T and SP at time T + 1")
+    // get random aggregation row
+    // 1456815660
+    // very inefficient
+    var range = df.filter("availabilityZone = 'eu-west-1a'").filter("instanceType = 'm1.medium'")
+    var row1 = range.sample(false, 1)
+    var aggregate = row1.select("aggregation").head().getInt(0).toString()
+    println("aggregate before string" + aggregate)
+    println("aggregate after string " + aggregate.substring(0, 9))
+    var substr = aggregate.substring(0,9)
+    println("this is what our string evaluates to: " + "aggregation = '" + (substr.toInt + 3600) + "'")
+    var row2 = df.filter("aggregation = '" + (substr.toInt - 3600) + "0'").filter("availabilityZone = 'eu-west-1a'").filter("instanceType = 'm1.medium'")
+    var row3 = df.filter("aggregation = '" + (substr.toInt + 3600) + "0'").filter("availabilityZone = 'eu-west-1a'").filter("instanceType = 'm1.medium'")
 
-    // spotprice row 2
-    // get row right in front of that row
-    // get row right after that row
+    //get spotprice for middle, first and last row
+    var spot1 = row1.select("spotPrice").head().getDouble(0)
+    var spot2 = row2.select("spotPrice").head().getDouble(0)
+    var future = row1.select("futurePrice").head().getDouble(0)
+    var change = row1.select("priceChange").head().getDouble(0)
+    row3.select("spotPrice").show()
+    var spot3 = row3.select("spotPrice").head().getDouble(0)
+
+    println("pricechange:" + change + "should be equal to" + (spot1 - spot2))
+    println("futurePrice:" + future + "should be equal to" + (spot3))
+
+    println("#### HOUR, DOW, SHOULD BE ENCODED CORRECTLY BASED ON TIMESTAMP")
+    var random = df.sample(false, 1)
+    random = random.select("timeStamp", "hour", "dayOfWeek")
+     // visually inspect random row
+    random.select("timestamp").show()
+    random.select("hour").show()
+    random.select("dayOfWeek").show()
+    // get random row
+
+    // get timeStamp, hour and dow column
+    // split timestamp to get hour and dow
 
     // calculate correlations between features and label
     //var correlations = for (feature <- features) yield  feature + ": " +  df.stat.corr(feature, "increase")
     /*
-   df.groupBy("availabilityZone", "instanceType").avg("priceChange").coalesce(1)
+     df.groupBy("availabilityZone", "instanceType").avg("priceChange").coalesce(1)
      .write.format("com.databricks.spark.csv")
      .option("header", "true")
      .mode(SaveMode.Overwrite)
