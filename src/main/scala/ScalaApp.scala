@@ -25,6 +25,69 @@ import org.apache.spark.ml.regression.{RandomForestRegressor, RandomForestRegres
 //spark submit command:
 //spark-submit --class "basetable" --master "local[2]" --packages "com.databricks:spark-csv_2.11:1.4.0,joda-time:joda-time:2.9.3" target/scala-2.11/sample-project_2.11-1.0.jar
 
+object helper {
+  // CONSTANTS
+  // prices for on demand instances
+  val M1_EU_US = 0.095
+  val C3_EU_US = 0.12
+  val G2_EU_US = 0.702
+  val M1_AP = 0.117
+  val C3_AP = 0.132
+  val G2_AP = 1.00
+
+  // HELPER FUNCTIONS FOR BASETABLE
+  def isWeekDay = udf((date: String) => {
+        var formatter: DateTimeFormatter  = DateTimeFormat.forPattern("yyyy-MM-dd")
+        formatter.parseDateTime(date).dayOfWeek().get
+      })
+
+      def aggregate(split: Int) = udf((date:String, hours: Int, minutes: Int) => {
+        // aggregate datapoints on 15, 30 or 60 minute intervals
+
+        // initialize variable to be re-assigned a value in pattern matching
+        var group = 0
+
+        split match {
+          // split the data every 15, 30 or 60 minutes
+          case 15 => minutes match {
+            // reassign all minutes to one specific minute in one of 4 quarters, so they can later be grouped
+            case x if x < 15 => group = 1
+            case x if x >= 15 && x < 30 => group = 2
+            case x if x >= 30 && x < 45 => group = 3
+            case x => group = 4
+            }
+          case 30 => minutes match {
+            case x if x < 30 => group = 1
+            case x if x >= 30 => group = 2
+          }
+          case 60 => group = 1
+        }
+
+        // create string ready for unix_TimeStamp conversion
+        // minutes in this unix are meaningless, since we use the group variable to perform a .groupby().mean("spotPrice") on the aggregation column
+        date + " " + hours + ":" + group + ":" + "00"
+
+      })
+      def isIrrational = udf((zone: String, instance: String, price: Double) => {
+        // remove subregion reference a, b, c
+        val region  = zone.dropRight(1)
+
+        // check if spot price >= on-demand price
+        region match {
+          case x if x == "eu-west-1" || x == "us-west-2" => instance match {
+            case x if x == "m1.medium" => price >= M1_EU_US
+            case x if x == "c3.large" => price >= C3_EU_US
+            case x if x == "g2.2xlarge" => price >= G2_EU_US
+          }
+          case x if x == "ap-southeast-1" => instance match {
+            case x if x == "m1.medium" => price >= M1_AP
+            case x if x == "c3.large" => price >= C3_AP
+            case x if x == "g2.2xlarge" => price >= G2_AP
+          }
+        }
+      })
+}
+
 // main class
 object basetable {
   def main(args: Array[String]) {
@@ -33,70 +96,11 @@ object basetable {
     val sqlContext = new org.apache.spark.sql.hive.HiveContext(sc)
     val df = sqlContext.read.json("/Users/tscheys/ScalaApp/aws.json")
 
-    // CONSTANTS
-    // prices for on demand instances
-    val M1_EU_US = 0.095
-    val C3_EU_US = 0.12
-    val G2_EU_US = 0.702
-    val M1_AP = 0.117
-    val C3_AP = 0.132
-    val G2_AP = 1.00
-
     val INTERVALS = Seq(60)
 
     // HELPER FUNCTIONS
 
     // create binary for weekday/weekend
-    def isWeekDay = udf((date: String) => {
-      var formatter: DateTimeFormatter  = DateTimeFormat.forPattern("yyyy-MM-dd")
-      formatter.parseDateTime(date).dayOfWeek().get
-    })
-
-    def aggregate(split: Int) = udf((date:String, hours: Int, minutes: Int) => {
-      // aggregate datapoints on 15, 30 or 60 minute intervals
-
-      // initialize variable to be re-assigned a value in pattern matching
-      var group = 0
-
-      split match {
-        // split the data every 15, 30 or 60 minutes
-        case 15 => minutes match {
-          // reassign all minutes to one specific minute in one of 4 quarters, so they can later be grouped
-          case x if x < 15 => group = 1
-          case x if x >= 15 && x < 30 => group = 2
-          case x if x >= 30 && x < 45 => group = 3
-          case x => group = 4
-          }
-        case 30 => minutes match {
-          case x if x < 30 => group = 1
-          case x if x >= 30 => group = 2
-        }
-        case 60 => group = 1
-      }
-
-      // create string ready for unix_TimeStamp conversion
-      // minutes in this unix are meaningless, since we use the group variable to perform a .groupby().mean("spotPrice") on the aggregation column
-      date + " " + hours + ":" + group + ":" + "00"
-
-    })
-    def isIrrational = udf((zone: String, instance: String, price: Double) => {
-      // remove subregion reference a, b, c
-      val region  = zone.dropRight(1)
-
-      // check if spot price >= on-demand price
-      region match {
-        case x if x == "eu-west-1" || x == "us-west-2" => instance match {
-          case x if x == "m1.medium" => price >= M1_EU_US
-          case x if x == "c3.large" => price >= C3_EU_US
-          case x if x == "g2.2xlarge" => price >= G2_EU_US
-        }
-        case x if x == "ap-southeast-1" => instance match {
-          case x if x == "m1.medium" => price >= M1_AP
-          case x if x == "c3.large" => price >= C3_AP
-          case x if x == "g2.2xlarge" => price >= G2_AP
-        }
-      }
-    })
 
     // makes basetable for different time aggregation intervals
     // we will call this function 3 times: for 15, 30 and 60 minutes
@@ -112,7 +116,7 @@ object basetable {
 
       // aggregate data (interpolation)
 
-      df = df.withColumn("aggregation", unix_timestamp(aggregate(interval)(col("date"), col("hours"), col("minutes"))))
+      df = df.withColumn("aggregation", unix_timestamp(helper.aggregate(interval)(col("date"), col("hours"), col("minutes"))))
 
       // do quick check if aggregation is properly able to form groups
       df.orderBy("AvailabilityZone", "InstanceType", "aggregation").show()
@@ -129,13 +133,13 @@ object basetable {
         .withColumn("hours", substring(col("TimeStamp"), 12, 2).cast("Int"))
         .withColumn("quarter", substring(col("TimeStamp"), 16, 1).cast("Int"))
         .withColumn("date", substring(col("TimeStamp"), 1, 10))
-        .withColumn("isWeekDay", (isWeekDay(col("date")) <= 5).cast("Int"))
-        .withColumn("dayOfWeek", isWeekDay(col("date")))
+        .withColumn("isWeekDay", (helper.isWeekDay(col("date")) <= 5).cast("Int"))
+        .withColumn("dayOfWeek", helper.isWeekDay(col("date")))
         .withColumn("isDaytime", (col("hours") >= 6 && col("hours") <= 18).cast("Int"))
         .withColumn("isWorktime", (col("hours") >= 9 && col("hours") <= 17).cast("Int"))
         .withColumn("isNight", (col("hours") <= 6).cast("Int"))
         .withColumn("isWorktime2", (col("hours") >= 8 && col("hours") <= 18).cast("Int"))
-        .withColumn("isIrrational", isIrrational(col("AvailabilityZone"), col("InstanceType"), col("spotPrice")).cast("Integer"))
+        .withColumn("isIrrational", helper.isIrrational(col("AvailabilityZone"), col("InstanceType"), col("spotPrice")).cast("Integer"))
 
       // make sure changes to columns are correct
       df.show()
