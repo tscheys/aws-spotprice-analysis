@@ -87,17 +87,17 @@ object helper {
           }
         }
       })
+              // create column with date + 1 day (we want stats of 1st january to be used on 2nd of january)
+      def datePlusOne = udf((date: String) => {
+        var formatter: DateTimeFormatter  = DateTimeFormat.forPattern("yyyy-MM-dd")
+        var nextDate = formatter.parseDateTime(date).plusDays(1)
+        formatter.print(nextDate)
+      })
 
       def dailyStats = (data: DataFrame) => {
         var df = data
         var dailies = df.groupBy("availabilityZone", "instanceType","date").agg(avg("spotPrice" ),max("spotPrice"), min("spotPrice"), avg("priceChange"), max("priceChange"), min("priceChange"), stddev("priceChange"))
 
-        // create column with date + 1 day (we want stats of 1st january to be used on 2nd of january)
-        def datePlusOne = udf((date: String) => {
-          var formatter: DateTimeFormatter  = DateTimeFormat.forPattern("yyyy-MM-dd")
-          var nextDate = formatter.parseDateTime(date).plusDays(1)
-          formatter.print(nextDate)
-        })
         dailies = dailies
           .withColumn("date", datePlusOne(col("date")))
         dailies.show()
