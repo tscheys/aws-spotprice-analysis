@@ -88,6 +88,32 @@ object helper {
         }
       })
 
+      def dailyStats = (data: DataFrame) => {
+        var df = data
+        var dailies = df.groupBy("availabilityZone", "instanceType","date").agg(avg("spotPrice" ),max("spotPrice"), min("spotPrice"), avg("priceChange"), max("priceChange"), min("priceChange"), stddev("priceChange"))
+
+        // create column with date + 1 day (we want stats of 1st january to be used on 2nd of january)
+        def datePlusOne = udf((date: String) => {
+          var formatter: DateTimeFormatter  = DateTimeFormat.forPattern("yyyy-MM-dd")
+          var nextDate = formatter.parseDateTime(date).plusDays(1)
+          formatter.print(nextDate)
+        })
+        dailies = dailies
+          .withColumn("date", datePlusOne(col("date")))
+        dailies.show()
+        dailies.printSchema()
+        df = df
+          .join(dailies, Seq("availabilityZone", "instanceType" ,"date"))
+          .withColumn("diffMeanSpot", col("spotPrice") - col("avg(spotPrice)"))
+          .withColumn("diffMeanChange", abs(col("priceChange") - col("avg(priceChange)")))
+          .withColumnRenamed("stddev_samp(priceChange,0,0)", "stddev")
+
+        // take care of missing stddevs
+        var average = df.na.drop().select(avg("stddev")).head()
+        df.na.fill(average.getDouble(0), Seq("stddev"))
+
+      }
+
       // load a basetable with a certain interval
       def loadBasetable = (interval: Int) => {
         getContext
@@ -191,48 +217,9 @@ object basetable {
 
       // get statistics avg, max, min, stddev
       // calculate avg, max, min, stddev of previous day
-      var dailies = df.groupBy("availabilityZone", "instanceType","date").agg(avg("spotPrice" ),max("spotPrice"), min("spotPrice"), avg("priceChange"), max("priceChange"), min("priceChange"))
-
-      // create column with date + 1 day (we want stats of 1st january to be used on 2nd of january)
-      def datePlusOne = udf((date: String) => {
-        var formatter: DateTimeFormatter  = DateTimeFormat.forPattern("yyyy-MM-dd")
-        var nextDate = formatter.parseDateTime(date).plusDays(1)
-        formatter.print(nextDate)
-      })
-      dailies = dailies
-        .withColumn("date", datePlusOne(col("date")))
-      dailies.show()
-      dailies.printSchema()
-      df = df
-        .join(dailies, Seq("availabilityZone", "instanceType" ,"date"))
-        .withColumn("diffMeanSpot", col("spotPrice") - col("avg(spotPrice)"))
-        .withColumn("diffMeanChange", abs(col("priceChange") - col("avg(priceChange)")))
-
-      var deviations = df.groupBy("availabilityZone", "instanceType", "date").agg(stddev("priceChange"))
-      deviations = deviations
-        .withColumnRenamed("stddev_samp(priceChange,0,0)", "stddev")
-
+      df = helper.dailyStats(df)
       df.show()
-      //df.printSchema()
-      //calculate average of stddev
-      var average = deviations.na.drop().select(avg("stddev")).head()
-      // fill average when deviation was NaN
-      deviations = deviations.na.fill(average.getDouble(0), Seq("stddev"))
-      deviations = deviations
-        .withColumnRenamed("date", "date1")
-      df = df
-        .withColumnRenamed("date", "date1")
-
-      // for debugging purposes
-      println("####DEVIATIONS")
-      deviations.show()
-      println("####BASETABLE")
-      df.show()
-
-      // join deviations and df
-      df = df
-        .join(deviations, Seq("availabilityZone", "instanceType", "date1"))
-
+      /*
       df = df
         .withColumn("isVolatile", (col("priceChange") > (col("stddev") * 2)).cast("Int"))
         .withColumnRenamed("date1", "date")
@@ -246,6 +233,7 @@ object basetable {
 
       // save basetable to csv
       df.write.format("com.databricks.spark.csv").option("header", "true").mode(SaveMode.Overwrite).save("/Users/tscheys/thesis-data/basetable" + interval + ".csv")
+      * */
     }
 
     // invoke basetableMaker() for every interval
