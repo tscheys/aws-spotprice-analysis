@@ -437,16 +437,22 @@ object statistics {
     // should be for all three
     val df = helper.loadBasetable(60)
 
-    //instead of making this array, make use of the columns command, returns all the columns
-    val features = df.columns
     // TODO: get list of string variables dynamically
-    val corFeatures = features.diff(Array("TimeStamp", "availabilityZone", "instanceType","date", "futurePrice", "increase", "decrease", "same"))
+    val corFeatures = df.columns.diff(Array("TimeStamp", "availabilityZone", "instanceType","date", "futurePrice", "increase", "decrease", "same"))
 
     // Statistics
 
     // datapoint per availabilityZone - instanceType pair
     val corrIncrease = for (feature <- corFeatures) yield  feature + ": " +  df.stat.corr(feature, "increase")
     val corrFuture = for (feature <- corFeatures) yield  feature + ": " +  df.stat.corr(feature, "futurePrice")
+    val correlations = for(feature1 <- corFeatures) yield {
+      for(feature2 <- corFeatures) yield {
+
+        // put these in another dataframe for quick manipulation/sorting/...
+        Array(feature1, feature2, df.stat.corr(feature1, feature2))
+      }
+    }
+
     // check frequency of volatility
     var volatileFreq = df.groupBy("isVolatile").count()
     var irrationalFreq = df.groupBy("isIrrational").count()
@@ -460,7 +466,11 @@ object statistics {
     println("### PRICE VOLATILITY PER COUPLE:")
     df.groupBy("availabilityZone", "instanceType").avg("priceChange").sort("avg(priceChange)").show()
     println("### VARIABLE CORRELATIONS (FOR LABEL 'INCREASE'):" + corrIncrease.foreach (println))
+    // TODO: does not work
     println("### VARIABLE CORRELATIONS (FOR Y-VAR 'FUTUREPRICE'):" + corrFuture.foreach(println))
+    println("### CORRELATIONS BETWEEN FEATURES")
+    // TODO: fix this
+    println(correlations.foreach { x => x.deep.mkString("\n") })
   }
 }
 
