@@ -439,25 +439,14 @@ object statistics {
 
     //instead of making this array, make use of the columns command, returns all the columns
     val features = df.columns
+    // TODO: get list of string variables dynamically
+    val corFeatures = features.diff(Array("TimeStamp", "availabilityZone", "instanceType","date", "futurePrice", "increase", "decrease", "same"))
 
     // Statistics
 
     // datapoint per availabilityZone - instanceType pair
-    df.groupBy("availabilityZone", "instanceType").count.coalesce(1)
-      .write.format("com.databricks.spark.csv")
-      .option("header", "true")
-      .mode(SaveMode.Overwrite)
-      .save("../thesis-data/obsPerCouple.csv")
-
-    // calculate correlations between features and label
-    //var correlations = for (feature <- features) yield  feature + ": " +  df.stat.corr(feature, "increase")
-
-     df.groupBy("availabilityZone", "instanceType").avg("priceChange").coalesce(1)
-     .write.format("com.databricks.spark.csv")
-     .option("header", "true")
-     .mode(SaveMode.Overwrite)
-     .save("../thesis-data/volatility.csv")
-
+    val corrIncrease = for (feature <- corFeatures) yield  feature + ": " +  df.stat.corr(feature, "increase")
+    val corrFuture = for (feature <- corFeatures) yield  feature + ": " +  df.stat.corr(feature, "futurePrice")
     // check frequency of volatility
     var volatileFreq = df.groupBy("isVolatile").count()
     var irrationalFreq = df.groupBy("isIrrational").count()
@@ -466,7 +455,12 @@ object statistics {
     println("number of irrational obs")
     irrationalFreq.show()
 
-    //correlations.foreach (println)
+    println("### OBSERVATIONS PER COUPLE:")
+    df.groupBy("availabilityZone", "instanceType").count.sort("count").show()
+    println("### PRICE VOLATILITY PER COUPLE:")
+    df.groupBy("availabilityZone", "instanceType").avg("priceChange").sort("avg(priceChange)").show()
+    println("### VARIABLE CORRELATIONS (FOR LABEL 'INCREASE'):" + corrIncrease.foreach (println))
+    println("### VARIABLE CORRELATIONS (FOR Y-VAR 'FUTUREPRICE'):" + corrFuture.foreach(println))
   }
 }
 
