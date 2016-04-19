@@ -496,7 +496,6 @@ object testing {
     println("#### DAILY STATISTICS SHOULD CALCULATE STATISTICS FROM PREVIOUS DAY")
 
     // select certain instance in certain az on a certain date
-    /*
     var averageCheck = df.filter("availabilityZone = 'us-west-2a'").filter("instanceType = 'm1.medium'").filter("date = '2016-02-12'")
     averageCheck = averageCheck.select("spotPrice")
     averageCheck.show()
@@ -506,8 +505,6 @@ object testing {
     var lookupAverage = df.filter("availabilityZone = 'us-west-2a'").filter("instanceType = 'm1.medium'").filter("date = '2016-02-13'").select("avg(spotPrice)").head.getDouble(0)
     // check if average 1 equals average 2
     println("number 1 = " + ourAverage + "/n" + "number 2 = " + lookupAverage)
-    *
-    */
 
     println("#### PRICECHANGE SHOULD BE DIFFERENCE BETWEEN SP at time T and SP at time T + 1")
     // get random aggregation row
@@ -547,10 +544,10 @@ object testing {
 
     println("#### HOUR, DOW, SHOULD BE ENCODED CORRECTLY BASED ON TIMESTAMP")
     var random = df.sample(false, 1)
-    random = random.select("timeStamp", "hour", "dayOfWeek")
+    random = random.select("timeStamp", "hours", "dayOfWeek")
      // visually inspect random row
     random.select("timestamp").show()
-    random.select("hour").show()
+    random.select("hours").show()
     random.select("dayOfWeek").show()
   }
 }
