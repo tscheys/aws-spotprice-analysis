@@ -211,9 +211,9 @@ object basetable {
         lead(a.spotPrice) OVER (PARTITION BY a.AvailabilityZone, a.InstanceType ORDER BY a.aggregation) AS futurePrice
         FROM labelData a""")
       df = df
-        .withColumn("increase", col("increase").cast("Integer"))
-        .withColumn("decrease", col("decrease").cast("Integer"))
-        .withColumn("same", col("same").cast("Integer"))
+        .withColumn("increase", col("increase").cast("Double"))
+        .withColumn("decrease", col("decrease").cast("Double"))
+        .withColumn("same", col("same").cast("Double"))
 
       // remove null rows created by performing a lead
       // TODO: how many rows do we omit by doing this ?
@@ -256,7 +256,7 @@ object rfClassifier {
 
     //define time intervals
     val INTERVALS = Seq(60)
-    val NUM_TREES = 10
+    val NUM_TREES = 1
 
     val basetables = for (interval <- INTERVALS) yield helper.loadBasetable(interval)
 
@@ -330,19 +330,23 @@ object rfClassifier {
       val accuracy = evaluator.evaluate(predictions)
 
       val results = model.stages(2)
-      val importances = results.asInstanceOf[RandomForestClassificationModel].featureImportances
-      println(importances.toArray.toString())
-      //importances.
-
+      var importances = results.asInstanceOf[RandomForestClassificationModel].featureImportances
+      //println(importances)
+      def sortImportances (index: Int, value: Double)(names: Array[String]) = {
+        println(names(index), value)
+      }
+      importances.foreachActive((x,y) => sortImportances(x,y)(features))
+      var indexes = importances.toArray.toString()
+      println(indexes)
       //val rfModel = model.stages(2).asInstanceOf[RandomForestClassificationModel]
       //println("Learned classification forest model:\n" + rfModel.toDebugString)
       //return accuracies
-      "Test Error = " + (1.0 - accuracy) + "\n" + "Varimportances" + "\n" + importances.toJson
+      "Test Error = " + (1.0 - accuracy) + "\n" + "Varimportances" + "\n" + importances.toJson + "\n" + importances.toJson.indices
     }
 
     // define features
     val allFeatures = Array("spotPrice", "priceChange", "priceChangeLag1", "priceChangeLag2", "isIrrational", "t1", "t2", "t3", "stddev", "isVolatile", "hours", "quarter", "isWeekDay", "isDaytime")
-    val features = Array("spotPrice", "priceChange", "hours", "quarter", "isWeekDay", "isDaytime")
+    val features = Array("spotPrice", "priceChange", "hours", "quarter", "isWeekDay")
     val featuresAfterImp = Array("spotPrice", "priceChange", "hours", "isWeekDay")
     // , "priceChangeLag1", "priceChangeLag2"
     val labels = Array("increase", "decrease", "same")
@@ -352,7 +356,7 @@ object rfClassifier {
     // return accuracies for each basetable
     val accuracies = for (basetable <- basetables) yield {
       // for each basetable, try out different couples
-      for (couple <- couples) yield "zone" + couple(0) + " instance " + couple(1) + ":" + rfClassifier(basetable, labels(0), allFeatures, couple(0), couple(1))
+      for (couple <- couples) yield "zone" + couple(0) + " instance " + couple(1) + ":" + rfClassifier(basetable, labels(0), featuresAfterImp, couple(0), couple(1))
     }
 
     println("Report on Random Forest classifier (no trees: " + NUM_TREES + ")")
@@ -453,7 +457,7 @@ object statistics {
     val corrFuture = for (feature <- corFeatures.take(4)) yield  feature + ": " +  df.stat.corr(feature, "futurePrice")
     var correlations = for(feature1 <- corFeatures.take(4)) yield {
       for(feature2 <- corFeatures.take(4)) yield {
-
+      //TODO: werkt nog niet helemaal zoals verwacht
         // put these in another dataframe for quick manipulation/sorting/...
         // create a new correlation object, round number to 2 decimals,  get absolute value
         Correlation(feature1, feature2, Math.round(Math.abs(df.stat.corr(feature1, feature2))))
@@ -473,7 +477,7 @@ object statistics {
     df.groupBy("availabilityZone", "instanceType").count.sort("count").show()
     println("### PRICE VOLATILITY PER COUPLE:")
     df.groupBy("availabilityZone", "instanceType").avg("priceChange").sort("avg(priceChange)").show()
-    println("### VARIABLE CORRELATIONS (FOR LABEL 'INCREASE'):" + corrIncrease.deep.mkString("\n") )
+    println("### VARIABLE CORRELATIONS (FOR LABEL 'INCREASE'):" + corrIncrease.deep.mkString("\n"))
     println("### VARIABLE CORRELATIONS (FOR Y-VAR 'FUTUREPRICE'):" + corrFuture.deep.mkString("\n"))
     println("### CORRELATIONS BETWEEN FEATURES")
     val sorted = corrs.sortWith(_.corr > _.corr)
