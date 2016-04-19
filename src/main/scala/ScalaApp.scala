@@ -476,7 +476,6 @@ object testing {
     println("### DATA QUALITY CHECKS")
     println("#### ALL COLUMNS HAVE CORRECT TYPE")
     df.printSchema()
-    df.show()
 
     var azs = df.select("availabilityZone").distinct()
     var instances = df.select("instanceType").distinct()
