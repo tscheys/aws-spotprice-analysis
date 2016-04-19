@@ -161,6 +161,7 @@ object basetable {
       // take mean over fixed time interval chosen in aggregate() function
       df = df
         .groupBy("AvailabilityZone", "InstanceType", "aggregation").mean("spotPrice").sort("AvailabilityZone", "InstanceType", "aggregation")
+      df.show()
       df = df
         .withColumnRenamed("avg(spotPrice)", "spotPrice")
 
@@ -437,7 +438,7 @@ object statistics {
     val df = helper.loadBasetable(60)
 
     //instead of making this array, make use of the columns command, returns all the columns
-    val features = df.columns
+    /*val features = df.columns
 
     // Statistics
 
@@ -467,6 +468,8 @@ object statistics {
     println("#### WE HAVE 3 InstanceType in each of the 8 AZ's (24)")
     println("Number of Instance-AZ combinations: " + couples.count)
     println("list: /n " + couples.show())
+    *
+    */
 
     println("#### DAILY STATISTICS SHOULD CALCULATE STATISTICS FROM PREVIOUS DAY")
 
@@ -488,27 +491,39 @@ object statistics {
     // get random aggregation row
     // 1456815660
     // very inefficient
-    var range = df.filter("availabilityZone = 'eu-west-1a'").filter("instanceType = 'm1.medium'")
-    var row1 = range.sample(false, 1)
-    var aggregate = row1.select("aggregation").head().getInt(0).toString()
-    println("aggregate before string" + aggregate)
-    println("aggregate after string " + aggregate.substring(0, 9))
-    var substr = aggregate.substring(0,9)
-    println("this is what our string evaluates to: " + "aggregation = '" + (substr.toInt + 3600) + "'")
-    var row2 = df.filter("aggregation = '" + (substr.toInt - 3600) + "0'").filter("availabilityZone = 'eu-west-1a'").filter("instanceType = 'm1.medium'")
-    var row3 = df.filter("aggregation = '" + (substr.toInt + 3600) + "0'").filter("availabilityZone = 'eu-west-1a'").filter("instanceType = 'm1.medium'")
+    var range = df.filter("availabilityZone = 'us-west-2a'").filter("instanceType = 'm1.medium'")
+    var row1 = range.filter("date = '2016-02-02'")
+    var aggregate = row1.select("aggregation").head().getInt(0)
+
+    var row2 = range.filter("aggregation = '" + (aggregate + 3600) +  "'")
+    var row3 = range.filter("aggregation = '" + (aggregate + 7200) + "'")
 
     //get spotprice for middle, first and last row
     var spot1 = row1.select("spotPrice").head().getDouble(0)
     var spot2 = row2.select("spotPrice").head().getDouble(0)
-    var future = row1.select("futurePrice").head().getDouble(0)
-    var change = row1.select("priceChange").head().getDouble(0)
-    row3.select("spotPrice").show()
     var spot3 = row3.select("spotPrice").head().getDouble(0)
+    var future = row2.select("futurePrice").head().getDouble(0)
+    var change = row2.select("priceChange").head().getDouble(0)
 
-    println("pricechange:" + change + "should be equal to" + (spot1 - spot2))
-    println("futurePrice:" + future + "should be equal to" + (spot3))
+    //println("pricechange:" + change + "should be equal to" + (spot2 - spot1))
+    //println("futurePrice:" + future + "should be equal to" + (spot3))
+    if(change == spot2 - spot1) {
+      println("pricechange == previous price - current price PASSING")
+    } else {
+      println("pricechange == previous price - current price FAILING")
+    }
+    if(future == spot3) {
+      println("future price == next spot price PASSING")
+    } else {
+      println("future price == next spot price FAILING")
+    }
+    if(change == spot2 - spot1 && future == spot3) {
+      println("ALL TEST PASSING")
+    } else {
+      println("SOME TEST ARE FAILING")
+    }
 
+    /*
     println("#### HOUR, DOW, SHOULD BE ENCODED CORRECTLY BASED ON TIMESTAMP")
     var random = df.sample(false, 1)
     random = random.select("timeStamp", "hour", "dayOfWeek")
@@ -517,6 +532,8 @@ object statistics {
     random.select("hour").show()
     random.select("dayOfWeek").show()
     // get random row
+     *
+     */
 
     // get timeStamp, hour and dow column
     // split timestamp to get hour and dow
