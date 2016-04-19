@@ -331,6 +331,8 @@ object rfClassifier {
 
       val results = model.stages(2)
       val importances = results.asInstanceOf[RandomForestClassificationModel].featureImportances
+      println(importances.toArray.toString())
+      //importances.
 
       //val rfModel = model.stages(2).asInstanceOf[RandomForestClassificationModel]
       //println("Learned classification forest model:\n" + rfModel.toDebugString)
@@ -438,20 +440,26 @@ object statistics {
     val df = helper.loadBasetable(60)
 
     // TODO: get list of string variables dynamically
+    // create val with y-var names
+    // create command that gets all cols except of type string
     val corFeatures = df.columns.diff(Array("TimeStamp", "availabilityZone", "instanceType","date", "futurePrice", "increase", "decrease", "same"))
 
+    case class Correlation(val feat1: String, val feat2: String, val corr: Double)
     // Statistics
 
     // datapoint per availabilityZone - instanceType pair
-    val corrIncrease = for (feature <- corFeatures) yield  feature + ": " +  df.stat.corr(feature, "increase")
-    val corrFuture = for (feature <- corFeatures) yield  feature + ": " +  df.stat.corr(feature, "futurePrice")
-    val correlations = for(feature1 <- corFeatures) yield {
-      for(feature2 <- corFeatures) yield {
+
+    val corrIncrease = for (feature <- corFeatures.take(4)) yield  feature + ": " +  df.stat.corr(feature, "increase")
+    val corrFuture = for (feature <- corFeatures.take(4)) yield  feature + ": " +  df.stat.corr(feature, "futurePrice")
+    var correlations = for(feature1 <- corFeatures.take(4)) yield {
+      for(feature2 <- corFeatures.take(4)) yield {
 
         // put these in another dataframe for quick manipulation/sorting/...
-        Array(feature1, feature2, df.stat.corr(feature1, feature2))
+        // create a new correlation object, round number to 2 decimals,  get absolute value
+        Correlation(feature1, feature2, Math.round(Math.abs(df.stat.corr(feature1, feature2))))
       }
     }
+    var corrs = correlations(0)
 
     // check frequency of volatility
     var volatileFreq = df.groupBy("isVolatile").count()
@@ -465,12 +473,11 @@ object statistics {
     df.groupBy("availabilityZone", "instanceType").count.sort("count").show()
     println("### PRICE VOLATILITY PER COUPLE:")
     df.groupBy("availabilityZone", "instanceType").avg("priceChange").sort("avg(priceChange)").show()
-    println("### VARIABLE CORRELATIONS (FOR LABEL 'INCREASE'):" + corrIncrease.foreach (println))
-    // TODO: does not work
-    println("### VARIABLE CORRELATIONS (FOR Y-VAR 'FUTUREPRICE'):" + corrFuture.foreach(println))
+    println("### VARIABLE CORRELATIONS (FOR LABEL 'INCREASE'):" + corrIncrease.deep.mkString("\n") )
+    println("### VARIABLE CORRELATIONS (FOR Y-VAR 'FUTUREPRICE'):" + corrFuture.deep.mkString("\n"))
     println("### CORRELATIONS BETWEEN FEATURES")
-    // TODO: fix this
-    println(correlations.foreach { x => x.deep.mkString("\n") })
+    val sorted = corrs.sortWith(_.corr > _.corr)
+    println(sorted.deep.mkString("\n"))
   }
 }
 
