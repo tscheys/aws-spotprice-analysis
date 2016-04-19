@@ -438,7 +438,7 @@ object statistics {
     val df = helper.loadBasetable(60)
 
     //instead of making this array, make use of the columns command, returns all the columns
-    /*val features = df.columns
+    val features = df.columns
 
     // Statistics
 
@@ -449,6 +449,30 @@ object statistics {
       .mode(SaveMode.Overwrite)
       .save("../thesis-data/obsPerCouple.csv")
 
+    // calculate correlations between features and label
+    //var correlations = for (feature <- features) yield  feature + ": " +  df.stat.corr(feature, "increase")
+
+     df.groupBy("availabilityZone", "instanceType").avg("priceChange").coalesce(1)
+     .write.format("com.databricks.spark.csv")
+     .option("header", "true")
+     .mode(SaveMode.Overwrite)
+     .save("../thesis-data/volatility.csv")
+
+    // check frequency of volatility
+    var volatileFreq = df.groupBy("isVolatile").count()
+    var irrationalFreq = df.groupBy("isIrrational").count()
+    println("number of volatile obs")
+    volatileFreq.show()
+    println("number of irrational obs")
+    irrationalFreq.show()
+
+    //correlations.foreach (println)
+  }
+}
+
+object testing {
+  def main(args: Array[String]) {
+    var df = helper.loadBasetable(60)
     println("### DATA QUALITY CHECKS")
     println("#### ALL COLUMNS HAVE CORRECT TYPE")
     df.printSchema()
@@ -468,8 +492,6 @@ object statistics {
     println("#### WE HAVE 3 InstanceType in each of the 8 AZ's (24)")
     println("Number of Instance-AZ combinations: " + couples.count)
     println("list: /n " + couples.show())
-    *
-    */
 
     println("#### DAILY STATISTICS SHOULD CALCULATE STATISTICS FROM PREVIOUS DAY")
 
@@ -523,7 +545,6 @@ object statistics {
       println("SOME TEST ARE FAILING")
     }
 
-    /*
     println("#### HOUR, DOW, SHOULD BE ENCODED CORRECTLY BASED ON TIMESTAMP")
     var random = df.sample(false, 1)
     random = random.select("timeStamp", "hour", "dayOfWeek")
@@ -531,30 +552,5 @@ object statistics {
     random.select("timestamp").show()
     random.select("hour").show()
     random.select("dayOfWeek").show()
-    // get random row
-     *
-     */
-
-    // get timeStamp, hour and dow column
-    // split timestamp to get hour and dow
-
-    // calculate correlations between features and label
-    //var correlations = for (feature <- features) yield  feature + ": " +  df.stat.corr(feature, "increase")
-    /*
-     df.groupBy("availabilityZone", "instanceType").avg("priceChange").coalesce(1)
-     .write.format("com.databricks.spark.csv")
-     .option("header", "true")
-     .mode(SaveMode.Overwrite)
-     .save("../thesis-data/volatility.csv")
-
-    // check frequency of volatility
-    var volatileFreq = df.groupBy("isVolatile").count()
-    var irrationalFreq = df.groupBy("isIrrational").count()
-    println("number of volatile obs")
-    volatileFreq.show()
-    println("number of irrational obs")
-    irrationalFreq.show()
-*/
-    //correlations.foreach (println)
   }
 }
