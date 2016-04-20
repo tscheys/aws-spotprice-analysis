@@ -487,20 +487,49 @@ object statistics {
 
 object testing {
   def main(args: Array[String]) {
-    var df = helper.loadBasetable(60)
-    println("### DATA QUALITY CHECKS")
-    println("#### ALL COLUMNS HAVE CORRECT TYPE")
+    val df = helper.loadBasetable(60)
     df.printSchema()
 
-    var azs = df.select("availabilityZone").distinct()
-    var instances = df.select("instanceType").distinct()
-    var couples = df.select("availabilityZone", "instanceType").distinct()
-
     // do reporting on asz and instances
-    println("#### WE HAVE 8 AZs")
+    val azs = df.select("availabilityZone").distinct()
+    val instances = df.select("instanceType").distinct()
+    val couples = df.select("availabilityZone", "instanceType").distinct()
+
+    // select certain instance in certain az on a certain date
+    val averageCheck = df.filter("availabilityZone = 'us-west-2a'").filter("instanceType = 'm1.medium'").filter("date = '2016-02-12'")
+    // calculate average on that date
+    val ourAverage = averageCheck.select("spotPrice").agg(avg("spotPrice")).head.getDouble(0)
+    // select same instance in same az on that date + 1 day
+    val lookupAverage = df.filter("availabilityZone = 'us-west-2a'").filter("instanceType = 'm1.medium'").filter("date = '2016-02-13'").select("avg(spotPrice)").head.getDouble(0)
+    // check if average 1 equals average 2
+
+    // get random aggregation row
+    // 1456815660
+    // very inefficient
+    val range = df.filter("availabilityZone = 'us-west-2a'").filter("instanceType = 'm1.medium'")
+    val row1 = range.filter("date = '2016-02-02'")
+    val aggregate = row1.select("aggregation").head().getInt(0)
+
+    val row2 = range.filter("aggregation = '" + (aggregate + 3600) +  "'")
+    val row3 = range.filter("aggregation = '" + (aggregate + 7200) + "'")
+
+    //get spotprice for middle, first and last row
+    val spot1 = row1.select("spotPrice").head().getDouble(0)
+    val spot2 = row2.select("spotPrice").head().getDouble(0)
+    val spot3 = row3.select("spotPrice").head().getDouble(0)
+    val future = row2.select("futurePrice").head().getDouble(0)
+    val change = row2.select("priceChange").head().getDouble(0)
+
+    val random = df.sample(false, 1).select("timeStamp", "hours", "dayOfWeek")
+     // visually inspect random row
+    //do reporting
+    println("### DATA QUALITY CHECKS")
+
+    println("#### ALL COLUMNS HAVE CORRECT TYPE")
+    println("#### WE HAVE AZs")
     println("Number of Availability Zones: " + azs.count)
     println("list: /n " + azs.show())
-    println("#### WE HAVE 3 InstanceTypes")
+    println("#### WE HAVE INSTANCES")
     println("Number of Instances: /n " + instances.count)
     println("list: /n " + instances.show())
     println("#### WE HAVE 3 InstanceType in each of the 8 AZ's (24)")
@@ -508,60 +537,14 @@ object testing {
     println("list: /n " + couples.show())
 
     println("#### DAILY STATISTICS SHOULD CALCULATE STATISTICS FROM PREVIOUS DAY")
-
-    // select certain instance in certain az on a certain date
-    var averageCheck = df.filter("availabilityZone = 'us-west-2a'").filter("instanceType = 'm1.medium'").filter("date = '2016-02-12'")
-    averageCheck = averageCheck.select("spotPrice")
-    averageCheck.show()
-    // calculate average on that date
-    var ourAverage = averageCheck.agg(avg("spotPrice")).head.getDouble(0)
-    // select same instance in same az on that date + 1 day
-    var lookupAverage = df.filter("availabilityZone = 'us-west-2a'").filter("instanceType = 'm1.medium'").filter("date = '2016-02-13'").select("avg(spotPrice)").head.getDouble(0)
-    // check if average 1 equals average 2
     println("number 1 = " + ourAverage + "/n" + "number 2 = " + lookupAverage)
 
     println("#### PRICECHANGE SHOULD BE DIFFERENCE BETWEEN SP at time T and SP at time T + 1")
-    // get random aggregation row
-    // 1456815660
-    // very inefficient
-    var range = df.filter("availabilityZone = 'us-west-2a'").filter("instanceType = 'm1.medium'")
-    var row1 = range.filter("date = '2016-02-02'")
-    var aggregate = row1.select("aggregation").head().getInt(0)
-
-    var row2 = range.filter("aggregation = '" + (aggregate + 3600) +  "'")
-    var row3 = range.filter("aggregation = '" + (aggregate + 7200) + "'")
-
-    //get spotprice for middle, first and last row
-    var spot1 = row1.select("spotPrice").head().getDouble(0)
-    var spot2 = row2.select("spotPrice").head().getDouble(0)
-    var spot3 = row3.select("spotPrice").head().getDouble(0)
-    var future = row2.select("futurePrice").head().getDouble(0)
-    var change = row2.select("priceChange").head().getDouble(0)
-
-    //println("pricechange:" + change + "should be equal to" + (spot2 - spot1))
-    //println("futurePrice:" + future + "should be equal to" + (spot3))
-    if(change == spot2 - spot1) {
-      println("pricechange == previous price - current price PASSING")
-    } else {
-      println("pricechange == previous price - current price FAILING")
-    }
-    if(future == spot3) {
-      println("future price == next spot price PASSING")
-    } else {
-      println("future price == next spot price FAILING")
-    }
-    if(change == spot2 - spot1 && future == spot3) {
-      println("ALL TEST PASSING")
-    } else {
-      println("SOME TEST ARE FAILING")
-    }
+    println("pricechange == previous price - current price: " + change == spot2 - spot1 )
+    println("future price == next spot price: " + future == spot3)
 
     println("#### HOUR, DOW, SHOULD BE ENCODED CORRECTLY BASED ON TIMESTAMP")
-    var random = df.sample(false, 1)
-    random = random.select("timeStamp", "hours", "dayOfWeek")
-     // visually inspect random row
-    random.select("timestamp").show()
-    random.select("hours").show()
-    random.select("dayOfWeek").show()
+    println(random.show())
+
   }
 }
