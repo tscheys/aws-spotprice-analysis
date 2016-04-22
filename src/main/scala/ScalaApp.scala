@@ -8,6 +8,8 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.rdd.RDD
 
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
+
 // joda
 import org.joda.time
 import org.joda.time._
@@ -326,13 +328,14 @@ object rfClassifier {
       // Select example rows to display.
       predictions.select("predictedLabel", "label", "features").show(100)
 
-      // TRY
-      //val aucRDD = predictions.select("predictedLabel", "label")
-      //val rdd = aucRDD.rdd
+      val aucRDD = predictions.select("predictedLabel", "label")
+      val rdd = aucRDD.rdd.map(row => {
+        (row.get(0).toString().toDouble, row.get(1).toString.toDouble)
+        })
 
-      //val metrics = new BinaryClassificationMetrics(rdd)
-      //val auROC = metrics.areaUnderROC()
-      //AreaUnderCurve
+      val metrics = new BinaryClassificationMetrics(rdd)
+      val auROC = metrics.areaUnderROC()
+      println("AUC: " + auROC)
 
       // Select (prediction, true label) and compute test error
       val evaluator = new MulticlassClassificationEvaluator()
