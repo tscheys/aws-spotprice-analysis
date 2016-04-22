@@ -320,9 +320,16 @@ object rfClassifier {
       val pipeline = new Pipeline()
         .setStages(Array(labelIndexer, featureIndexer, rf, labelConverter))
 
+      // Select (prediction, true label) and compute test error
+      val evaluator = new MulticlassClassificationEvaluator()
+        .setLabelCol("indexedLabel")
+        .setPredictionCol("prediction")
+        .setMetricName("precision")
+
       val paramGrid = new ParamGridBuilder()
-        .addGrid(rf.numTrees, Array(30,60,90,120,180,250,300,350,400))
+        .addGrid(rf.numTrees, Array(30,60))
         .build()
+      //90,120,180,250,300,350,400
 
       // In this case the estimator is simply the linear regression.
       // A TrainValidationSplit requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
@@ -355,11 +362,6 @@ object rfClassifier {
       val auROC = metrics.areaUnderROC()
       println("AUC: " + auROC)
 
-      // Select (prediction, true label) and compute test error
-      val evaluator = new MulticlassClassificationEvaluator()
-        .setLabelCol("indexedLabel")
-        .setPredictionCol("prediction")
-        .setMetricName("precision")
       val accuracy = evaluator.evaluate(predictions)
       val importances = model.asInstanceOf[RandomForestClassificationModel].featureImportances
 
