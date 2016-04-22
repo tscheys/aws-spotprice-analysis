@@ -506,22 +506,16 @@ object testing {
     // get random aggregation row
     // 1456815660
     // very inefficient
-    val range = df.filter("availabilityZone = 'us-west-2a'").filter("instanceType = 'm1.medium'")
-    val row1 = range.filter("date = '2016-02-02'")
-    val aggregate = row1.select("aggregation").head().getInt(0)
-
-    val row2 = range.filter("aggregation = '" + (aggregate + 3600) +  "'")
-    val row3 = range.filter("aggregation = '" + (aggregate + 7200) + "'")
-
-    //get spotprice for middle, first and last row
-    val spot1 = row1.select("spotPrice").head().getDouble(0)
-    val spot2 = row2.select("spotPrice").head().getDouble(0)
-    val spot3 = row3.select("spotPrice").head().getDouble(0)
-    val future = row2.select("futurePrice").head().getDouble(0)
-    val change = row2.select("priceChange").head().getDouble(0)
+    val range = df.filter("availabilityZone = 'us-west-2a'").filter("instanceType = 'm1.medium'").filter("date = '2016-02-02'").sort("aggregation")
+    // take first value of that day
+    val aggregate = range.select("aggregation").head().getInt(0)
+    val spot1 = range.select("spotPrice").head().getDouble(0)
+    val spot3 = range.filter("aggregation = '" + (aggregate + 7200) + "'").select("spotPrice").head().getDouble(0)
+    val rowNow = range.filter("aggregation = '" + (aggregate + 3600) +  "'").select("spotPrice", "futurePrice", "priceChange")
+    val now = for(x <- Vector(0,1,2)) yield rowNow.head().getDouble(x)
 
     val random = df.sample(false, 1).select("timeStamp", "hours", "dayOfWeek")
-     // visually inspect random row
+    //visually inspect random row
     //do reporting
     println("### DATA QUALITY CHECKS")
 
@@ -540,8 +534,8 @@ object testing {
     println("number 1 = " + ourAverage + "/n" + "number 2 = " + lookupAverage)
 
     println("#### PRICECHANGE SHOULD BE DIFFERENCE BETWEEN SP at time T and SP at time T + 1")
-    println("pricechange == previous price - current price: " + change == spot2 - spot1 )
-    println("future price == next spot price: " + future == spot3)
+    println("pricechange == previous price - current price: " + now(2) == now(0) - spot1 )
+    println("future price == next spot price: " + now(1) == spot3)
 
     println("#### HOUR, DOW, SHOULD BE ENCODED CORRECTLY BASED ON TIMESTAMP")
     println(random.show())
