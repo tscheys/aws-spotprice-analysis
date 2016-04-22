@@ -26,6 +26,8 @@ import org.apache.spark.ml.regression.{ RandomForestRegressor, RandomForestRegre
 import org.apache.spark.mllib.evaluation
 import org.apache.spark.mllib.evaluation._
 
+import org.apache.spark.ml.tuning.{ParamGridBuilder, TrainValidationSplit}
+
 //spark submit command:
 //spark-submit --class "basetable" --master "local[2]" --packages "com.databricks:spark-csv_2.11:1.4.0,joda-time:joda-time:2.9.3" target/scala-2.11/sample-project_2.11-1.0.jar
 
@@ -300,7 +302,7 @@ object rfClassifier {
         .fit(df)
 
       // Split the data into training and test sets (30% held out for testing)
-      val Array(train, test) = df.randomSplit(Array(0.7, 0.3))
+      val Array(train, test) = df.randomSplit(Array(0.8, 0.2))
 
       // Train a RandomForest model.
       val rf = new RandomForestClassifier()
@@ -318,10 +320,28 @@ object rfClassifier {
       val pipeline = new Pipeline()
         .setStages(Array(labelIndexer, featureIndexer, rf, labelConverter))
 
-      // Train model.  This also runs the indexers.
-      val model = pipeline.fit(train)
+      val paramGrid = new ParamGridBuilder()
+        .addGrid(rf.numTrees, Array(30,60,90,120,180,250,300,350,400))
+        .build()
 
+      // In this case the estimator is simply the linear regression.
+      // A TrainValidationSplit requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
+      val trainValidationSplit = new TrainValidationSplit()
+        .setEstimator(pipeline)
+        .setEvaluator(evaluator)
+        .setEstimatorParamMaps(paramGrid)
+        // 80% of the data will be used for training and the remaining 20% for validation.
+        .setTrainRatio(0.8)
+
+      // Run train validation split, and choose the best set of parameters.
+      val model = trainValidationSplit.fit(train)
+
+      // Train model.  This also runs the indexers.
+      //val model = pipeline.fit(train)
+      // best model is selected here
       val predictions = model.transform(test)
+      val bestTrees = model.params
+      println("params:" + bestTrees)
 
       // Select example rows to display.
       predictions.select("predictedLabel", "label", "features").show(100)
@@ -341,8 +361,7 @@ object rfClassifier {
         .setPredictionCol("prediction")
         .setMetricName("precision")
       val accuracy = evaluator.evaluate(predictions)
-      val results = model.stages(2)
-      var importances = results.asInstanceOf[RandomForestClassificationModel].featureImportances
+      val importances = model.asInstanceOf[RandomForestClassificationModel].featureImportances
 
       case class Importance(val name: String, val importance: Double)
 
