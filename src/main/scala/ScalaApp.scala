@@ -455,15 +455,11 @@ object statistics {
 
     val corrIncrease = for (feature <- corFeatures.take(4)) yield  feature + ": " +  df.stat.corr(feature, "increase")
     val corrFuture = for (feature <- corFeatures.take(4)) yield  feature + ": " +  df.stat.corr(feature, "futurePrice")
-    var correlations = for(feature1 <- corFeatures.take(4)) yield {
-      for(feature2 <- corFeatures.take(4)) yield {
-      //TODO: werkt nog niet helemaal zoals verwacht
+    var corrs = for(i <- corFeatures.take(4); j <- corFeatures.take(4)) yield {
         // put these in another dataframe for quick manipulation/sorting/...
         // create a new correlation object, round number to 2 decimals,  get absolute value
-        Correlation(feature1, feature2, Math.round(Math.abs(df.stat.corr(feature1, feature2))))
-      }
+        Correlation(i, j, Math.abs(df.stat.corr(i, j)))
     }
-    var corrs = correlations(0)
 
     // check frequency of volatility
     var volatileFreq = df.groupBy("isVolatile").count()
