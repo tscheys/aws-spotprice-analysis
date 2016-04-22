@@ -6,6 +6,7 @@ import org.apache.spark.sql.hive._
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.rdd.RDD
 
 // joda
 import org.joda.time
@@ -21,6 +22,9 @@ import org.apache.spark.ml.classification.{ RandomForestClassificationModel, Ran
 import org.apache.spark.ml.evaluation.{ MulticlassClassificationEvaluator, RegressionEvaluator }
 import org.apache.spark.ml.feature.{ IndexToString, StringIndexer, VectorIndexer, VectorAssembler, Binarizer }
 import org.apache.spark.ml.regression.{ RandomForestRegressor, RandomForestRegressionModel }
+
+import org.apache.spark.mllib.evaluation
+import org.apache.spark.mllib.evaluation._
 
 //spark submit command:
 //spark-submit --class "basetable" --master "local[2]" --packages "com.databricks:spark-csv_2.11:1.4.0,joda-time:joda-time:2.9.3" target/scala-2.11/sample-project_2.11-1.0.jar
@@ -322,25 +326,34 @@ object rfClassifier {
       // Select example rows to display.
       predictions.select("predictedLabel", "label", "features").show(100)
 
+      // TRY
+      //val aucRDD = predictions.select("predictedLabel", "label")
+      //val rdd = aucRDD.rdd
+
+      //val metrics = new BinaryClassificationMetrics(rdd)
+      //val auROC = metrics.areaUnderROC()
+      //AreaUnderCurve
+
       // Select (prediction, true label) and compute test error
       val evaluator = new MulticlassClassificationEvaluator()
         .setLabelCol("indexedLabel")
         .setPredictionCol("prediction")
         .setMetricName("precision")
       val accuracy = evaluator.evaluate(predictions)
-
       val results = model.stages(2)
       var importances = results.asInstanceOf[RandomForestClassificationModel].featureImportances
-      //println(importances)
-      def sortImportances (index: Int, value: Double)(names: Array[String]) = {
-        println(names(index), value)
-      }
-      importances.foreachActive((x,y) => sortImportances(x,y)(features))
-      var indexes = importances.toArray.toString()
-      println(indexes)
-      //val rfModel = model.stages(2).asInstanceOf[RandomForestClassificationModel]
-      //println("Learned classification forest model:\n" + rfModel.toDebugString)
-      //return accuracies
+
+      case class Importance(val name: String, val importance: Double)
+
+      var importanceSorted = Array[Importance]()
+
+      importances.foreachActive((x,y) => {
+        importanceSorted:+ Importance(features(x), y)
+      })
+
+      val ranking = importanceSorted.sortWith(_.importance > _.importance)
+      println(ranking.toString())
+
       "Test Error = " + (1.0 - accuracy) + "\n" + "Varimportances" + "\n" + importances.toJson + "\n" + importances.toJson.indices
     }
 
@@ -449,9 +462,6 @@ object statistics {
     val corFeatures = df.columns.diff(Array("TimeStamp", "availabilityZone", "instanceType","date", "futurePrice", "increase", "decrease", "same"))
 
     case class Correlation(val feat1: String, val feat2: String, val corr: Double)
-    // Statistics
-
-    // datapoint per availabilityZone - instanceType pair
 
     val corrIncrease = for (feature <- corFeatures.take(4)) yield  feature + ": " +  df.stat.corr(feature, "increase")
     val corrFuture = for (feature <- corFeatures.take(4)) yield  feature + ": " +  df.stat.corr(feature, "futurePrice")
