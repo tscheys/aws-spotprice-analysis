@@ -8,8 +8,6 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.rdd.RDD
 
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
-
 // joda
 import org.joda.time
 import org.joda.time._
