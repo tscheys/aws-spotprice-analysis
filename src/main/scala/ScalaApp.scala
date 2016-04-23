@@ -218,21 +218,35 @@ object classifiers {
 
   def gbt = (data: DataFrame, label: String, features: Array[String]) => {
     // Split the data into training and test sets (30% held out for testing)
+    var df = data
+    val assembler = new VectorAssembler()
+        .setInputCols(features)
+        .setOutputCol("features")
+    // convert increase to binary variable
+    val binarizer: Binarizer = new Binarizer()
+        .setInputCol(label)
+        .setOutputCol("label")
+        .setThreshold(0.5)
+
+      // prepare variables for random forest
+    df = assembler.transform(df)
+    df = binarizer.transform(df)
+    df = df.select("features", "label")
 
     val labelIndexer = new StringIndexer()
       .setInputCol("label")
       .setOutputCol("indexedLabel")
-      .fit(data)
+      .fit(df)
     // Automatically identify categorical features, and index them.
     // Set maxCategories so features with > 4 distinct values are treated as continuous.
     val featureIndexer = new VectorIndexer()
       .setInputCol("features")
       .setOutputCol("indexedFeatures")
       .setMaxCategories(4)
-      .fit(data)
+      .fit(df)
 
     // Split the data into training and test sets (30% held out for testing)
-    val Array(trainingData, testData) = data.randomSplit(Array(0.7, 0.3))
+    val Array(trainingData, testData) = df.randomSplit(Array(0.7, 0.3))
 
     // Train a GBT model.
     val gbt = new GBTClassifier()
