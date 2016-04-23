@@ -454,10 +454,18 @@ object basetable {
         lead(a.sameTemp) OVER (PARTITION BY a.AvailabilityZone, a.InstanceType ORDER BY a.aggregation) AS same,
         lead(a.spotPrice) OVER (PARTITION BY a.AvailabilityZone, a.InstanceType ORDER BY a.aggregation) AS futurePrice
         FROM labelData a""")
+
+      def change = udf((inc: Double, decr: Double, same: Double) => {
+        if(inc == 1) 3
+        else if (decr == 1) 0
+        else if (same == 1) 2
+        2
+      })
       df = df
         .withColumn("increase", col("increase").cast("Double"))
         .withColumn("decrease", col("decrease").cast("Double"))
         .withColumn("same", col("same").cast("Double"))
+        .withColumn("change", change(col("increase"), col("decrease"), col("same")))
 
       // remove null rows created by performing a lead
       // TODO: how many rows do we omit by doing this ?
