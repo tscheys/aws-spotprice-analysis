@@ -22,16 +22,17 @@ import org.apache.spark.ml.classification.{ RandomForestClassificationModel, Ran
 import org.apache.spark.ml.evaluation.{ MulticlassClassificationEvaluator, RegressionEvaluator }
 import org.apache.spark.ml.feature.{ IndexToString, StringIndexer, VectorIndexer, VectorAssembler, Binarizer }
 import org.apache.spark.ml.regression.{ RandomForestRegressor, RandomForestRegressionModel }
+import org.apache.spark.ml.classification.MultilayerPerceptronClassifier
+import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 
 import org.apache.spark.mllib.evaluation
 import org.apache.spark.mllib.evaluation._
-
-import org.apache.spark.ml.tuning.{ParamGridBuilder, TrainValidationSplit}
 
 //spark submit command:
 //spark-submit --class "basetable" --master "local[2]" --packages "com.databricks:spark-csv_2.11:1.4.0,joda-time:joda-time:2.9.3" target/scala-2.11/sample-project_2.11-1.0.jar
 
 object classifiers {
+
   def rfClassifier = (data: DataFrame, label: String, features: Array[String], zone: String, instance: String) => {
       // subset dataset for m1.medium and us-west-2a
       //var df = data.filter("InstanceType = 'm1.medium'").filter("AvailabilityZone = 'us-west-2a'")
@@ -111,7 +112,6 @@ object classifiers {
       }
       aucs = aucs.sortWith(_.auc > _.auc)
       rf.setNumTrees(aucs.head.trees)
-      // eigenlijk moet dit train + validation zijn, dus train big
       val model = pipeline.fit(trainBig)
       //val model = pipeline.fit(train)
       val predictions = model.transform(test)
@@ -131,6 +131,60 @@ object classifiers {
       case class Report(val auc: List[AUC], val rank: Array[Importance])
       Report(aucs, ranking)
     }
+  def prepare = (data: DataFrame, label: String, features: Array[String]) => {
+      var df = data
+      val assembler = new VectorAssembler()
+        .setInputCols(features)
+        .setOutputCol("features")
+      // convert increase to binary variable
+      val binarizer: Binarizer = new Binarizer()
+        .setInputCol(label)
+        .setOutputCol("label")
+        .setThreshold(0.5)
+
+      // prepare variables for random forest
+      df = assembler.transform(df)
+      df = binarizer.transform(df)
+      df = df.select("features", "label")
+
+      val labelIndexer = new StringIndexer()
+        .setInputCol("label")
+        .setOutputCol("indexedLabel")
+        .fit(df)
+      // Automatically identify categorical features, and index them.
+      // Set maxCategories so features with > 4 distinct values are treated as continuous.
+      val featureIndexer = new VectorIndexer()
+        .setInputCol("features")
+        .setOutputCol("indexedFeatures")
+        .setMaxCategories(4)
+        .fit(df)
+      df
+  }
+  def neuralNet = (data: DataFrame, label: String, features: Array[String]) => {
+
+    // Split the data into train and test
+    // import data
+    var df = prepare(data, label, features)
+    val Array(train, test) = df.randomSplit(Array(0.6, 0.4))
+    // specify layers for the neural network:
+    // input layer of size 4 (features), two intermediate of size 5 and 4
+    // and output of size 3 (classes)
+    val layers = Array[Int](4, 5, 4, 3)
+    // create the trainer and set its parameters
+    val trainer = new MultilayerPerceptronClassifier()
+      .setLayers(layers)
+      .setBlockSize(128)
+      .setSeed(1234L)
+      .setMaxIter(100)
+    // train the model
+    val model = trainer.fit(train)
+    // compute precision on the test set
+    val result = model.transform(test)
+    val predictionAndLabels = result.select("prediction", "label")
+    val evaluator = new MulticlassClassificationEvaluator()
+      .setMetricName("precision")
+    println("Precision:" + evaluator.evaluate(predictionAndLabels))
+  }
 }
 
 object helper {
@@ -381,7 +435,8 @@ object configClass {
     }
     println(accuracies(0).auc.toString())
     println(accuracies(0).rank.deep.mkString("\n").toString())
-
+    // CONFIG NEURAL NET
+    classifiers.neuralNet(basetables(0), labels(0), features)
     // CONFIG LOGISTIC CLASSIFIER
   }
 }
