@@ -359,41 +359,34 @@ object basetable {
   }
 }
 
-object rfClassifier {
+object configClass {
   def main(args: Array[String]) {
 
     //define time intervals
     val INTERVALS = Seq(15)
-    val NUM_TREES = 1
-
     val basetables = for (interval <- INTERVALS) yield helper.loadBasetable(interval)
 
     //check if loaded correctly into array
     basetables(0).show()
 
-    //START RF CLASSIFIER
-
     // define features
     //val allFeatures = Array("spotPrice", "priceChange", "priceChangeLag1", "priceChangeLag2", "isIrrational", "t1", "t2", "t3", "stddev", "isVolatile", "hours", "quarter", "isWeekDay", "isDaytime")
-    //val features = Array("spotPrice", "priceChange", "hours", "quarter", "isWeekDay")
     val features = Array("spotPrice", "hours", "quarter", "diffMeanChange", "aggregation", "avg(spotPrice)", "stddev")
-    //val featuresAfterImp = Array("spotPrice", "priceChange", "hours", "isWeekDay")
-    // , "priceChangeLag1", "priceChangeLag2"
     val labels = Array("increase", "decrease", "same")
-
-    //val couples = Array(Array("us-west-2a", "m1.medium"), Array("ap-southeast-1a", "c3.large"), Array("us-west-2b", "c3.large"))
     val couples = Array(Array("us-west-2a", "m1.medium"))
-    // return accuracies for each basetable
+    // CONFIG RF CLASSIFIER
     val accuracies = for (basetable <- basetables; couple <- couples) yield {
       // for each basetable, try out different couples
-      rfClassifier(basetable, labels(0), features, couple(0), couple(1))
+      classifiers.rfClassifier(basetable, labels(0), features, couple(0), couple(1))
     }
     println(accuracies(0).auc.toString())
     println(accuracies(0).rank.deep.mkString("\n").toString())
+
+    // CONFIG LOGISTIC CLASSIFIER
   }
 }
 
-object rfRegression {
+object configReg {
   def main(args: Array[String]) {
 
     //define time intervals
