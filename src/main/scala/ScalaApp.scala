@@ -165,9 +165,33 @@ object classifiers {
 
     // Split the data into train and test
     // import data
-    var df = prepare(data, label, features)
+    //var df = prepare(data, label, features)
 
-    val Array(train, test) = df.randomSplit(Array(0.6, 0.4))
+    val labelIndexer = new StringIndexer()
+      .setInputCol("label")
+      .setOutputCol("indexedLabel")
+      .fit(data)
+    // Automatically identify categorical features, and index them.
+    // Set maxCategories so features with > 4 distinct values are treated as continuous.
+    val featureIndexer = new VectorIndexer()
+      .setInputCol("features")
+      .setOutputCol("indexedFeatures")
+      .setMaxCategories(4)
+      .fit(data)
+
+// Train a GBT model.
+    val gbt = new GBTClassifier()
+      .setLabelCol("indexedLabel")
+      .setFeaturesCol("indexedFeatures")
+      .setMaxIter(10)
+
+// Convert indexed labels back to original labels.
+    val labelConverter = new IndexToString()
+      .setInputCol("prediction")
+      .setOutputCol("predictedLabel")
+      .setLabels(labelIndexer.labels)
+
+    val Array(train, test) = data.randomSplit(Array(0.6, 0.4))
     // specify layers for the neural network:
     // input layer of size 4 (features), two intermediate of size 5 and 4
     // and output of size 3 (classes)
@@ -179,8 +203,11 @@ object classifiers {
       .setSeed(1234L)
       .setMaxIter(100)
     // train the model
-    val model = trainer.fit(train)
+    //val model = trainer.fit(train)
+    val pipeline = new Pipeline()
+      .setStages(Array(labelIndexer, featureIndexer, gbt, labelConverter))
     // compute precision on the test set
+    val model = pipeline.fit(train)
     val result = model.transform(test)
     val predictionAndLabels = result.select("prediction", "label")
     val evaluator = new MulticlassClassificationEvaluator()
