@@ -302,13 +302,12 @@ object rfClassifier {
         .fit(df)
 
       // Split the data into training and test sets (30% held out for testing)
-      val Array(train, test) = df.randomSplit(Array(0.8, 0.2))
+      val Array(train, test, validation) = df.randomSplit(Array(0.6, 0.2, 0.2))
 
       // Train a RandomForest model.
       val rf = new RandomForestClassifier()
         .setLabelCol("indexedLabel")
         .setFeaturesCol("indexedFeatures")
-        .setNumTrees(NUM_TREES)
 
       // Convert indexed labels back to original labels.
       val labelConverter = new IndexToString()
@@ -316,91 +315,85 @@ object rfClassifier {
         .setOutputCol("predictedLabel")
         .setLabels(labelIndexer.labels)
 
-      // Chain indexers and forest in a Pipeline
-      val pipeline = new Pipeline()
-        .setStages(Array(labelIndexer, featureIndexer, rf, labelConverter))
-
       // Select (prediction, true label) and compute test error
       val evaluator = new MulticlassClassificationEvaluator()
         .setLabelCol("indexedLabel")
         .setPredictionCol("prediction")
         .setMetricName("precision")
-
-      val paramGrid = new ParamGridBuilder()
-        .addGrid(rf.numTrees, Array(30,60))
-        .build()
-      //90,120,180,250,300,350,400
-
-      // In this case the estimator is simply the linear regression.
-      // A TrainValidationSplit requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
-      val trainValidationSplit = new TrainValidationSplit()
-        .setEstimator(pipeline)
-        .setEvaluator(evaluator)
-        .setEstimatorParamMaps(paramGrid)
-        // 80% of the data will be used for training and the remaining 20% for validation.
-        .setTrainRatio(0.8)
-
-      // Run train validation split, and choose the best set of parameters.
-      val model = trainValidationSplit.fit(train)
+      //val params = new ParamMap()
 
       // Train model.  This also runs the indexers.
-      //val model = pipeline.fit(train)
-      // best model is selected here
-      val predictions = model.transform(test)
-      val bestTrees = model.params
-      println("params:" + bestTrees)
+      var trees = List(1,2)
+      case class Prediction(val trees: Integer, val predictions: DataFrame)
 
+      var predicts = for (tree <- trees) yield {
+        // Chain indexers and forest in a Pipeline
+        val pipeline = new Pipeline()
+          .setStages(Array(labelIndexer, featureIndexer, rf.setNumTrees(tree), labelConverter))
+        val model = pipeline.fit(validation)
+        //val model = pipeline.fit(train)
+        val predictions = model.transform(test)
+        Prediction(tree, predictions)
+      }
       // Select example rows to display.
-      predictions.select("predictedLabel", "label", "features").show(100)
-
-      val aucRDD = predictions.select("predictedLabel", "label")
-      val rdd = aucRDD.rdd.map(row => {
-        (row.get(0).toString().toDouble, row.get(1).toString.toDouble)
+      case class AUC(auc: Double, trees: Integer)
+      var aucs = for (predict <- predicts) yield {
+        val aucRDD = predict.predictions.select("predictedLabel", "label")
+        //x.predictions
+        val rdd = aucRDD.rdd.map(row => {
+          (row.get(0).toString().toDouble, row.get(1).toString.toDouble)
         })
 
-      val metrics = new BinaryClassificationMetrics(rdd)
-      val auROC = metrics.areaUnderROC()
-      println("AUC: " + auROC)
+        val metrics = new BinaryClassificationMetrics(rdd)
+        val auROC = metrics.areaUnderROC()
+        AUC(auROC, predict.trees)
+      }
 
-      val accuracy = evaluator.evaluate(predictions)
-      val importances = model.asInstanceOf[RandomForestClassificationModel].featureImportances
+      aucs = aucs.sortWith(_.auc > _.auc)
+      // selects best AUC
+      println(aucs.length)
+      val finalTrees = aucs.head
+      val pipeline = new Pipeline()
+          .setStages(Array(labelIndexer, featureIndexer, rf.setNumTrees(finalTrees.trees), labelConverter))
+      // eigenlijk moet dit train + validation zijn, dus train big
+      val model = pipeline.fit(train)
+      //val model = pipeline.fit(train)
+      val predictions = model.transform(test)
+      //val accuracy = evaluator.evaluate(predictions)
+      val importances = model.stages(2).asInstanceOf[RandomForestClassificationModel].featureImportances
 
       case class Importance(val name: String, val importance: Double)
+      println(importances)
+      val indices = importances.toSparse.indices
+      val zipped = for(index <- indices) yield {
+        val value = importances(index)
+        val name = features(index)
+        Importance(name, value)
+      }
 
-      var importanceSorted = Array[Importance]()
-
-      importances.foreachActive((x,y) => {
-        importanceSorted:+ Importance(features(x), y)
-      })
-
-      val ranking = importanceSorted.sortWith(_.importance > _.importance)
-      println(ranking.toString())
-
-      "Test Error = " + (1.0 - accuracy) + "\n" + "Varimportances" + "\n" + importances.toJson + "\n" + importances.toJson.indices
+      val ranking = zipped.sortWith(_.importance > _.importance)
+      println(ranking.deep.toString())
+      case class Report(val auc: List[AUC], val rank: Array[Importance])
+      Report(aucs, ranking)
+      //"Test Error = " + (1.0 - accuracy) + "\n" + "Varimportances" + "\n" + importances.toJson + "\n" + importances.toJson.indices
     }
 
     // define features
-    val allFeatures = Array("spotPrice", "priceChange", "priceChangeLag1", "priceChangeLag2", "isIrrational", "t1", "t2", "t3", "stddev", "isVolatile", "hours", "quarter", "isWeekDay", "isDaytime")
+    //val allFeatures = Array("spotPrice", "priceChange", "priceChangeLag1", "priceChangeLag2", "isIrrational", "t1", "t2", "t3", "stddev", "isVolatile", "hours", "quarter", "isWeekDay", "isDaytime")
     val features = Array("spotPrice", "priceChange", "hours", "quarter", "isWeekDay")
-    val featuresAfterImp = Array("spotPrice", "priceChange", "hours", "isWeekDay")
+    //val featuresAfterImp = Array("spotPrice", "priceChange", "hours", "isWeekDay")
     // , "priceChangeLag1", "priceChangeLag2"
     val labels = Array("increase", "decrease", "same")
 
-    val couples = Array(Array("us-west-2a", "m1.medium"), Array("ap-southeast-1a", "c3.large"), Array("us-west-2b", "c3.large"))
-
+    //val couples = Array(Array("us-west-2a", "m1.medium"), Array("ap-southeast-1a", "c3.large"), Array("us-west-2b", "c3.large"))
+    val couples = Array(Array("us-west-2a", "m1.medium"))
     // return accuracies for each basetable
-    val accuracies = for (basetable <- basetables) yield {
+    val accuracies = for (basetable <- basetables; couple <- couples) yield {
       // for each basetable, try out different couples
-      for (couple <- couples) yield "zone" + couple(0) + " instance " + couple(1) + ":" + rfClassifier(basetable, labels(0), featuresAfterImp, couple(0), couple(1))
+      rfClassifier(basetable, labels(0), features, couple(0), couple(1))
     }
-
-    println("Report on Random Forest classifier (no trees: " + NUM_TREES + ")")
-    println("y var: " + labels(0))
-    println("for intervals")
-    INTERVALS.foreach(println)
-    println("Test error = 1 - accuracy")
-    accuracies.foreach(x => x.foreach(println))
-
+    println(accuracies(0).auc.toString())
+    println(accuracies(0).rank.deep.mkString("\n").toString())
   }
 }
 
@@ -485,9 +478,9 @@ object statistics {
 
     case class Correlation(val feat1: String, val feat2: String, val corr: Double)
 
-    val corrIncrease = for (feature <- corFeatures.take(4)) yield  feature + ": " +  df.stat.corr(feature, "increase")
-    val corrFuture = for (feature <- corFeatures.take(4)) yield  feature + ": " +  df.stat.corr(feature, "futurePrice")
-    var corrs = for(i <- corFeatures.take(4); j <- corFeatures.take(4)) yield {
+    val corrIncrease = for (feature <- corFeatures) yield  feature + ": " +  df.stat.corr(feature, "increase")
+    val corrFuture = for (feature <- corFeatures) yield  feature + ": " +  df.stat.corr(feature, "futurePrice")
+    var corrs = for(i <- corFeatures; j <- corFeatures) yield {
         // put these in another dataframe for quick manipulation/sorting/...
         // create a new correlation object, round number to 2 decimals,  get absolute value
         Correlation(i, j, Math.abs(df.stat.corr(i, j)))
