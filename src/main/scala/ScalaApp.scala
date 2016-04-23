@@ -143,7 +143,7 @@ object basetable {
   def main(args: Array[String]) {
     val sqlContext = helper.getContext
     val df = sqlContext.read.json("/Users/tscheys/ScalaApp/aws.json")
-    val INTERVALS = Seq(60)
+    val INTERVALS = Seq(15)
 
     // makes basetable for different time aggregation intervals
     // we will call this function 3 times: for 15, 30 and 60 minutes
@@ -302,44 +302,44 @@ object rfClassifier {
         .fit(df)
 
       // Split the data into training and test sets (30% held out for testing)
-      val Array(train, test, validation) = df.randomSplit(Array(0.6, 0.2, 0.2))
+      val Array(trainBig, test) = df.randomSplit(Array(0.8, 0.2))
+      val Array(train, validation) = trainBig.randomSplit(Array(0.7, 0.3))
 
       // Train a RandomForest model.
       val rf = new RandomForestClassifier()
         .setLabelCol("indexedLabel")
         .setFeaturesCol("indexedFeatures")
-
       // Convert indexed labels back to original labels.
       val labelConverter = new IndexToString()
         .setInputCol("prediction")
         .setOutputCol("predictedLabel")
         .setLabels(labelIndexer.labels)
+      val pipeline = new Pipeline()
+        .setStages(Array(labelIndexer, featureIndexer, rf, labelConverter))
 
       // Select (prediction, true label) and compute test error
       val evaluator = new MulticlassClassificationEvaluator()
         .setLabelCol("indexedLabel")
         .setPredictionCol("prediction")
         .setMetricName("precision")
-      //val params = new ParamMap()
 
       // Train model.  This also runs the indexers.
       var trees = List(1,2)
       case class Prediction(val trees: Integer, val predictions: DataFrame)
+      case class AUC(auc: Double, trees: Integer)
+      case class Importance(val name: String, val importance: Double)
 
       var predicts = for (tree <- trees) yield {
         // Chain indexers and forest in a Pipeline
-        val pipeline = new Pipeline()
-          .setStages(Array(labelIndexer, featureIndexer, rf.setNumTrees(tree), labelConverter))
+        rf.setNumTrees(tree)
         val model = pipeline.fit(validation)
-        //val model = pipeline.fit(train)
         val predictions = model.transform(test)
         Prediction(tree, predictions)
       }
       // Select example rows to display.
-      case class AUC(auc: Double, trees: Integer)
       var aucs = for (predict <- predicts) yield {
         val aucRDD = predict.predictions.select("predictedLabel", "label")
-        //x.predictions
+
         val rdd = aucRDD.rdd.map(row => {
           (row.get(0).toString().toDouble, row.get(1).toString.toDouble)
         })
@@ -348,21 +348,15 @@ object rfClassifier {
         val auROC = metrics.areaUnderROC()
         AUC(auROC, predict.trees)
       }
-
       aucs = aucs.sortWith(_.auc > _.auc)
-      // selects best AUC
-      println(aucs.length)
-      val finalTrees = aucs.head
-      val pipeline = new Pipeline()
-          .setStages(Array(labelIndexer, featureIndexer, rf.setNumTrees(finalTrees.trees), labelConverter))
+      rf.setNumTrees(aucs.head.trees)
       // eigenlijk moet dit train + validation zijn, dus train big
-      val model = pipeline.fit(train)
+      val model = pipeline.fit(trainBig)
       //val model = pipeline.fit(train)
       val predictions = model.transform(test)
       //val accuracy = evaluator.evaluate(predictions)
       val importances = model.stages(2).asInstanceOf[RandomForestClassificationModel].featureImportances
 
-      case class Importance(val name: String, val importance: Double)
       println(importances)
       val indices = importances.toSparse.indices
       val zipped = for(index <- indices) yield {
