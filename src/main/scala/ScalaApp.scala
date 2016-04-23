@@ -24,6 +24,7 @@ import org.apache.spark.ml.feature.{ IndexToString, StringIndexer, VectorIndexer
 import org.apache.spark.ml.regression.{ RandomForestRegressor, RandomForestRegressionModel }
 import org.apache.spark.ml.classification.MultilayerPerceptronClassifier
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
+import org.apache.spark.ml.classification.{GBTClassificationModel, GBTClassifier}
 
 import org.apache.spark.mllib.evaluation
 import org.apache.spark.mllib.evaluation._
@@ -170,7 +171,7 @@ object classifiers {
     // specify layers for the neural network:
     // input layer of size 4 (features), two intermediate of size 5 and 4
     // and output of size 3 (classes)
-    val layers = Array[Int](features.length, 5, 4, 2)
+    val layers = Array[Int](features.length, 30, 30, 30, 2)
     // create the trainer and set its parameters
     val trainer = new MultilayerPerceptronClassifier()
       .setLayers(layers)
@@ -213,6 +214,33 @@ object classifiers {
     val roc = binarySummary.roc
     roc.show()
     println(binarySummary.areaUnderROC)
+  }
+
+  def gbt = (data: DataFrame, label: String, features: Array[String]) => {
+    // Split the data into training and test sets (30% held out for testing)
+    var df = prepare(data, label, features)
+    val Array(trainingData, testData) = df.randomSplit(Array(0.7, 0.3))
+
+    // Train a GBT model.
+    val gbt = new GBTClassifier()
+      .setLabelCol("indexedLabel")
+      .setFeaturesCol("indexedFeatures")
+      .setMaxIter(10)
+    val model = gbt.fit(trainingData)
+
+    // Make predictions.
+    val predictions = model.transform(testData)
+
+    // Select example rows to display.
+    predictions.select("predictedLabel", "label", "features").show(5)
+
+    // Select (prediction, true label) and compute test error
+    val evaluator = new MulticlassClassificationEvaluator()
+      .setLabelCol("indexedLabel")
+      .setPredictionCol("prediction")
+      .setMetricName("precision")
+    val accuracy = evaluator.evaluate(predictions)
+    println("Test Error = " + (1.0 - accuracy))
   }
 }
 
@@ -468,8 +496,11 @@ object configClass {
     *
     */
     // CONFIG NEURAL NET
-    classifiers.neuralNet(basetables(0).filter("instanceType='m1.medium'").filter("availabilityZone='us-west-2a'"), labels(0), features)
+    //classifiers.neuralNet(basetables(0).filter("instanceType='m1.medium'").filter("availabilityZone='us-west-2a'"), labels(0), features)
     // CONFIG LOGISTIC CLASSIFIER
+    //classifiers.logistic(basetables(0).filter("instanceType='m1.medium'").filter("availabilityZone='us-west-2a'"), labels(0), features)
+    // CONFIG GBT
+    classifiers.gbt(basetables(0).filter("instanceType='m1.medium'").filter("availabilityZone='us-west-2a'"), labels(0), features)
   }
 }
 
