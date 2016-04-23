@@ -18,7 +18,7 @@ import org.joda.time.format.DateTimeFormatter._
 
 // ML
 import org.apache.spark.ml.Pipeline
-import org.apache.spark.ml.classification.{ RandomForestClassificationModel, RandomForestClassifier }
+import org.apache.spark.ml.classification.{ RandomForestClassificationModel, RandomForestClassifier, LogisticRegression, BinaryLogisticRegressionSummary}
 import org.apache.spark.ml.evaluation.{ MulticlassClassificationEvaluator, RegressionEvaluator }
 import org.apache.spark.ml.feature.{ IndexToString, StringIndexer, VectorIndexer, VectorAssembler, Binarizer }
 import org.apache.spark.ml.regression.{ RandomForestRegressor, RandomForestRegressionModel }
@@ -165,11 +165,12 @@ object classifiers {
     // Split the data into train and test
     // import data
     var df = prepare(data, label, features)
+
     val Array(train, test) = df.randomSplit(Array(0.6, 0.4))
     // specify layers for the neural network:
     // input layer of size 4 (features), two intermediate of size 5 and 4
     // and output of size 3 (classes)
-    val layers = Array[Int](4, 5, 4, 3)
+    val layers = Array[Int](features.length, 5, 4, 2)
     // create the trainer and set its parameters
     val trainer = new MultilayerPerceptronClassifier()
       .setLayers(layers)
@@ -184,6 +185,34 @@ object classifiers {
     val evaluator = new MulticlassClassificationEvaluator()
       .setMetricName("precision")
     println("Precision:" + evaluator.evaluate(predictionAndLabels))
+  }
+
+  def logistic = (data: DataFrame, label: String, features: Array[String]) => {
+    var df = prepare(data, label, features)
+    val Array(training, test) = df.randomSplit(Array(0.7,0.3))
+    val lr = new LogisticRegression()
+      .setMaxIter(10)
+      .setRegParam(0.3)
+      .setElasticNetParam(0.8)
+
+    // Fit the model
+    val lrModel = lr.fit(training)
+
+    val trainingSummary = lrModel.summary
+
+    // Obtain the objective per iteration.
+    val objectiveHistory = trainingSummary.objectiveHistory
+    objectiveHistory.foreach(loss => println(loss))
+
+    // Obtain the metrics useful to judge performance on test data.
+    // We cast the summary to a BinaryLogisticRegressionSummary since the problem is a
+    // binary classification problem.
+    val binarySummary = trainingSummary.asInstanceOf[BinaryLogisticRegressionSummary]
+
+    // Obtain the receiver-operating characteristic as a dataframe and areaUnderROC.
+    val roc = binarySummary.roc
+    roc.show()
+    println(binarySummary.areaUnderROC)
   }
 }
 
@@ -429,14 +458,17 @@ object configClass {
     val labels = Array("increase", "decrease", "same")
     val couples = Array(Array("us-west-2a", "m1.medium"))
     // CONFIG RF CLASSIFIER
+    /*
     val accuracies = for (basetable <- basetables; couple <- couples) yield {
       // for each basetable, try out different couples
       classifiers.rfClassifier(basetable, labels(0), features, couple(0), couple(1))
     }
     println(accuracies(0).auc.toString())
     println(accuracies(0).rank.deep.mkString("\n").toString())
+    *
+    */
     // CONFIG NEURAL NET
-    classifiers.neuralNet(basetables(0), labels(0), features)
+    classifiers.neuralNet(basetables(0).filter("instanceType='m1.medium'").filter("availabilityZone='us-west-2a'"), labels(0), features)
     // CONFIG LOGISTIC CLASSIFIER
   }
 }
