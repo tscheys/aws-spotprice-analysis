@@ -31,6 +31,108 @@ import org.apache.spark.ml.tuning.{ParamGridBuilder, TrainValidationSplit}
 //spark submit command:
 //spark-submit --class "basetable" --master "local[2]" --packages "com.databricks:spark-csv_2.11:1.4.0,joda-time:joda-time:2.9.3" target/scala-2.11/sample-project_2.11-1.0.jar
 
+object classifiers {
+  def rfClassifier = (data: DataFrame, label: String, features: Array[String], zone: String, instance: String) => {
+      // subset dataset for m1.medium and us-west-2a
+      //var df = data.filter("InstanceType = 'm1.medium'").filter("AvailabilityZone = 'us-west-2a'")
+      var df = data
+      val assembler = new VectorAssembler()
+        .setInputCols(features)
+        .setOutputCol("features")
+      // convert increase to binary variable
+      val binarizer: Binarizer = new Binarizer()
+        .setInputCol(label)
+        .setOutputCol("label")
+        .setThreshold(0.5)
+
+      // prepare variables for random forest
+      df = assembler.transform(df)
+      df = binarizer.transform(df)
+      df = df.select("features", "label")
+
+      val labelIndexer = new StringIndexer()
+        .setInputCol("label")
+        .setOutputCol("indexedLabel")
+        .fit(df)
+      // Automatically identify categorical features, and index them.
+      // Set maxCategories so features with > 4 distinct values are treated as continuous.
+      val featureIndexer = new VectorIndexer()
+        .setInputCol("features")
+        .setOutputCol("indexedFeatures")
+        .setMaxCategories(4)
+        .fit(df)
+
+      // Split the data into training and test sets (30% held out for testing)
+      val Array(trainBig, test) = df.randomSplit(Array(0.8, 0.2))
+      val Array(train, validation) = trainBig.randomSplit(Array(0.7, 0.3))
+
+      // Train a RandomForest model.
+      val rf = new RandomForestClassifier()
+        .setLabelCol("indexedLabel")
+        .setFeaturesCol("indexedFeatures")
+      // Convert indexed labels back to original labels.
+      val labelConverter = new IndexToString()
+        .setInputCol("prediction")
+        .setOutputCol("predictedLabel")
+        .setLabels(labelIndexer.labels)
+      val pipeline = new Pipeline()
+        .setStages(Array(labelIndexer, featureIndexer, rf, labelConverter))
+
+      // Select (prediction, true label) and compute test error
+      val evaluator = new MulticlassClassificationEvaluator()
+        .setLabelCol("indexedLabel")
+        .setPredictionCol("prediction")
+        .setMetricName("precision")
+
+      // Train model.  This also runs the indexers.
+      var trees = List(30,60,90,120,150,180,210,240,280,350,400, 450)
+      case class Prediction(val trees: Integer, val predictions: DataFrame)
+      case class AUC(auc: Double, trees: Integer)
+      case class Importance(val name: String, val importance: Double)
+
+      var predicts = for (tree <- trees) yield {
+        // Chain indexers and forest in a Pipeline
+        rf.setNumTrees(tree)
+        val model = pipeline.fit(validation)
+        val predictions = model.transform(test)
+        Prediction(tree, predictions)
+      }
+      // Select example rows to display.
+      var aucs = for (predict <- predicts) yield {
+        val aucRDD = predict.predictions.select("predictedLabel", "label")
+
+        val rdd = aucRDD.rdd.map(row => {
+          (row.get(0).toString().toDouble, row.get(1).toString.toDouble)
+        })
+
+        val metrics = new BinaryClassificationMetrics(rdd)
+        val auROC = metrics.areaUnderROC()
+        AUC(auROC, predict.trees)
+      }
+      aucs = aucs.sortWith(_.auc > _.auc)
+      rf.setNumTrees(aucs.head.trees)
+      // eigenlijk moet dit train + validation zijn, dus train big
+      val model = pipeline.fit(trainBig)
+      //val model = pipeline.fit(train)
+      val predictions = model.transform(test)
+      //val accuracy = evaluator.evaluate(predictions)
+      val importances = model.stages(2).asInstanceOf[RandomForestClassificationModel].featureImportances
+
+      println(importances)
+      val indices = importances.toSparse.indices
+      val zipped = for(index <- indices) yield {
+        val value = importances(index)
+        val name = features(index)
+        Importance(name, value)
+      }
+
+      val ranking = zipped.sortWith(_.importance > _.importance)
+      println(ranking.deep.toString())
+      case class Report(val auc: List[AUC], val rank: Array[Importance])
+      Report(aucs, ranking)
+    }
+}
+
 object helper {
   // CONSTANTS
   // prices for on demand instances
@@ -261,7 +363,7 @@ object rfClassifier {
   def main(args: Array[String]) {
 
     //define time intervals
-    val INTERVALS = Seq(60)
+    val INTERVALS = Seq(15)
     val NUM_TREES = 1
 
     val basetables = for (interval <- INTERVALS) yield helper.loadBasetable(interval)
@@ -271,110 +373,10 @@ object rfClassifier {
 
     //START RF CLASSIFIER
 
-    def rfClassifier = (data: DataFrame, label: String, features: Array[String], zone: String, instance: String) => {
-      // subset dataset for m1.medium and us-west-2a
-      //var df = data.filter("InstanceType = 'm1.medium'").filter("AvailabilityZone = 'us-west-2a'")
-      var df = data
-      val assembler = new VectorAssembler()
-        .setInputCols(features)
-        .setOutputCol("features")
-      // convert increase to binary variable
-      val binarizer: Binarizer = new Binarizer()
-        .setInputCol(label)
-        .setOutputCol("label")
-        .setThreshold(0.5)
-
-      // prepare variables for random forest
-      df = assembler.transform(df)
-      df = binarizer.transform(df)
-      df = df.select("features", "label")
-
-      val labelIndexer = new StringIndexer()
-        .setInputCol("label")
-        .setOutputCol("indexedLabel")
-        .fit(df)
-      // Automatically identify categorical features, and index them.
-      // Set maxCategories so features with > 4 distinct values are treated as continuous.
-      val featureIndexer = new VectorIndexer()
-        .setInputCol("features")
-        .setOutputCol("indexedFeatures")
-        .setMaxCategories(4)
-        .fit(df)
-
-      // Split the data into training and test sets (30% held out for testing)
-      val Array(trainBig, test) = df.randomSplit(Array(0.8, 0.2))
-      val Array(train, validation) = trainBig.randomSplit(Array(0.7, 0.3))
-
-      // Train a RandomForest model.
-      val rf = new RandomForestClassifier()
-        .setLabelCol("indexedLabel")
-        .setFeaturesCol("indexedFeatures")
-      // Convert indexed labels back to original labels.
-      val labelConverter = new IndexToString()
-        .setInputCol("prediction")
-        .setOutputCol("predictedLabel")
-        .setLabels(labelIndexer.labels)
-      val pipeline = new Pipeline()
-        .setStages(Array(labelIndexer, featureIndexer, rf, labelConverter))
-
-      // Select (prediction, true label) and compute test error
-      val evaluator = new MulticlassClassificationEvaluator()
-        .setLabelCol("indexedLabel")
-        .setPredictionCol("prediction")
-        .setMetricName("precision")
-
-      // Train model.  This also runs the indexers.
-      var trees = List(1,2)
-      case class Prediction(val trees: Integer, val predictions: DataFrame)
-      case class AUC(auc: Double, trees: Integer)
-      case class Importance(val name: String, val importance: Double)
-
-      var predicts = for (tree <- trees) yield {
-        // Chain indexers and forest in a Pipeline
-        rf.setNumTrees(tree)
-        val model = pipeline.fit(validation)
-        val predictions = model.transform(test)
-        Prediction(tree, predictions)
-      }
-      // Select example rows to display.
-      var aucs = for (predict <- predicts) yield {
-        val aucRDD = predict.predictions.select("predictedLabel", "label")
-
-        val rdd = aucRDD.rdd.map(row => {
-          (row.get(0).toString().toDouble, row.get(1).toString.toDouble)
-        })
-
-        val metrics = new BinaryClassificationMetrics(rdd)
-        val auROC = metrics.areaUnderROC()
-        AUC(auROC, predict.trees)
-      }
-      aucs = aucs.sortWith(_.auc > _.auc)
-      rf.setNumTrees(aucs.head.trees)
-      // eigenlijk moet dit train + validation zijn, dus train big
-      val model = pipeline.fit(trainBig)
-      //val model = pipeline.fit(train)
-      val predictions = model.transform(test)
-      //val accuracy = evaluator.evaluate(predictions)
-      val importances = model.stages(2).asInstanceOf[RandomForestClassificationModel].featureImportances
-
-      println(importances)
-      val indices = importances.toSparse.indices
-      val zipped = for(index <- indices) yield {
-        val value = importances(index)
-        val name = features(index)
-        Importance(name, value)
-      }
-
-      val ranking = zipped.sortWith(_.importance > _.importance)
-      println(ranking.deep.toString())
-      case class Report(val auc: List[AUC], val rank: Array[Importance])
-      Report(aucs, ranking)
-      //"Test Error = " + (1.0 - accuracy) + "\n" + "Varimportances" + "\n" + importances.toJson + "\n" + importances.toJson.indices
-    }
-
     // define features
     //val allFeatures = Array("spotPrice", "priceChange", "priceChangeLag1", "priceChangeLag2", "isIrrational", "t1", "t2", "t3", "stddev", "isVolatile", "hours", "quarter", "isWeekDay", "isDaytime")
-    val features = Array("spotPrice", "priceChange", "hours", "quarter", "isWeekDay")
+    //val features = Array("spotPrice", "priceChange", "hours", "quarter", "isWeekDay")
+    val features = Array("spotPrice", "hours", "quarter", "diffMeanChange", "aggregation", "avg(spotPrice)", "stddev")
     //val featuresAfterImp = Array("spotPrice", "priceChange", "hours", "isWeekDay")
     // , "priceChangeLag1", "priceChangeLag2"
     val labels = Array("increase", "decrease", "same")
