@@ -564,16 +564,16 @@ object basetable {
         FROM labelData a""")
 
       def change = udf((inc: Double, decr: Double, same: Double) => {
-        if(inc == 1) 3
-        else if (decr == 1) 0
-        else if (same == 1) 2
-        null
+        if(inc == 1.0) 3
+        else if (decr == 1.0) 1
+        else if (same == 1.0) 2
+        4
       })
       df = df
         .withColumn("increase", col("increase").cast("Double"))
         .withColumn("decrease", col("decrease").cast("Double"))
         .withColumn("same", col("same").cast("Double"))
-        .withColumn("multi", change(col("increase"), col("decrease"), col("same")))
+        .withColumn("multi", change(col("increase"), col("decrease"), col("same")).cast("Double"))
 
       // remove null rows created by performing a lead
       println("Loss by dropping NA's: " + df.count())
