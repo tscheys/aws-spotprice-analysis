@@ -672,7 +672,7 @@ object statistics {
     val corFeatures = df.columns.diff(Array("TimeStamp", "availabilityZone", "instanceType","date", "futurePrice", "increase", "decrease", "same"))
 
     case class Correlation(val feat1: String, val feat2: String, val corr: Double)
-
+    /*
     val visual = df.filter("instanceType='m1.medium'").filter("availabilityZone= 'us-west-2a'").select("spotPrice", "date" ,"aggregation", "hours").coalesce(1)
         .write.format("com.databricks.spark.csv")
         .option("header", "true")
@@ -685,6 +685,10 @@ object statistics {
         .option("header", "true")
         .mode(SaveMode.Overwrite)
         .save("../thesis-data/density.csv")
+        *
+        */
+    val lastObs = df.select("date", "hours", "aggregation").sort(desc("aggregation")).head()
+    println(lastObs)
         /*
     val corrIncrease = for (feature <- corFeatures) yield  feature + ": " +  df.stat.corr(feature, "increase")
     val corrFuture = for (feature <- corFeatures) yield  feature + ": " +  df.stat.corr(feature, "futurePrice")
@@ -772,4 +776,34 @@ object testing {
     println(random.show())
 
   }
+}
+
+object mergeData {
+  def main(args: Array[String]) {
+    val sqlContext = helper.getContext
+      var df = sqlContext.read.json("/Users/tscheys/ScalaApp/aws2404.json")
+      val INTERVALS = Seq(15)
+
+      // makes basetable for different time aggregation intervals
+      // we will call this function 3 times: for 15, 30 and 60 minutes
+
+        df = df.withColumn("SpotPrice", col("SpotPrice").cast("Double"))
+
+        // create time variables
+        df = df
+          .withColumn("date", substring(col("TimeStamp"), 0, 10))
+          .withColumn("hours", substring(col("TimeStamp"), 12, 2).cast("Int"))
+          .withColumn("minutes", substring(col("TimeStamp"), 15, 2).cast("Int"))
+
+        // aggregate data (interpolation)
+
+        df = df.withColumn("aggregation", unix_timestamp(helper.aggregate(15)(col("date"), col("hours"), col("minutes"))))
+        df = df.filter("aggregation > 1457902860")
+        df = df.select("Timestamp","ProductDescription","InstanceType","SpotPrice","AvailabilityZone").withColumn("spotPrice", col("spotPrice").cast("String")).coalesce(1)
+
+        println("TEST")
+
+        df.write.format("org.apache.spark.sql.json").mode(SaveMode.Append).save("../aws2.json")
+        }
+
 }
