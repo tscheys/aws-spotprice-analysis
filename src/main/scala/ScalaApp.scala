@@ -567,16 +567,16 @@ object basetable {
         if(inc == 1) 3
         else if (decr == 1) 0
         else if (same == 1) 2
-        2
+        null
       })
       df = df
         .withColumn("increase", col("increase").cast("Double"))
         .withColumn("decrease", col("decrease").cast("Double"))
         .withColumn("same", col("same").cast("Double"))
-        .withColumn("change", change(col("increase"), col("decrease"), col("same")))
+        .withColumn("multi", change(col("increase"), col("decrease"), col("same")))
 
       // remove null rows created by performing a lead
-      // TODO: how many rows do we omit by doing this ?
+
       df = df.na.drop()
       // check if lag() was done correctly
 
