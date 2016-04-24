@@ -652,10 +652,11 @@ object configReg {
     var INTERVALS = Seq(60)
 
     val basetables = for (interval <- INTERVALS) yield helper.loadBasetable(interval)
+    // features en labels definieren
 
-    val RMSE = for (basetable <- basetables) yield rfRegression(basetable)
+    //val RMSE = for (basetable <- basetables) yield regressors.rfRegression(basetable)
 
-    RMSE.foreach { println }
+    //RMSE.foreach { println }
 
   }
 }
@@ -672,13 +673,18 @@ object statistics {
 
     case class Correlation(val feat1: String, val feat2: String, val corr: Double)
 
-    val visual = df.filter("instanceType='m1.medium'").filter("availabilityZone= 'us-west-2a'").select("spotPrice", "aggregation").coalesce(1)
+    val visual = df.filter("instanceType='m1.medium'").filter("availabilityZone= 'us-west-2a'").select("spotPrice", "date" ,"aggregation", "hours").coalesce(1)
         .write.format("com.databricks.spark.csv")
         .option("header", "true")
         .mode(SaveMode.Overwrite)
         .save("../thesis-data/series.csv")
+
     val density = df.groupBy("availabilityZone", "instanceType", "date").count()
-    val avg = density.groupBy("availabilityZone", "instanceType").mean("count").show()
+    val avg = density.groupBy("availabilityZone", "instanceType").mean("count").orderBy("avg(count)").coalesce(1)
+        .write.format("com.databricks.spark.csv")
+        .option("header", "true")
+        .mode(SaveMode.Overwrite)
+        .save("../thesis-data/density.csv")
         /*
     val corrIncrease = for (feature <- corFeatures) yield  feature + ": " +  df.stat.corr(feature, "increase")
     val corrFuture = for (feature <- corFeatures) yield  feature + ": " +  df.stat.corr(feature, "futurePrice")
