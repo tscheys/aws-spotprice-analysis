@@ -177,9 +177,6 @@ object classifiers {
     df = mlhelp.binarize(df, label)
     df = df.select("features", "label")
 
-    mlhelp.labelIndex(df)
-    mlhelp.featureIndex(df)
-
     val Array(train, test) = df.randomSplit(Array(0.6, 0.4))
     // specify layers for the neural network:
     val layers = Array[Int](features.length, 30, 30, 30, 2)
@@ -280,12 +277,6 @@ object regressors {
       // prepare variables for random forest
       var df = mlhelp.assemble(data, features)
 
-      val featureIndexer = new VectorIndexer()
-        .setInputCol("features")
-        .setOutputCol("indexedFeatures")
-        .setMaxCategories(4)
-        .fit(df)
-
       // Split the data into training and test sets (30% held out for testing)
       val Array(trainingData, testData) = df.randomSplit(Array(0.7, 0.3))
 
@@ -296,11 +287,9 @@ object regressors {
 
       // Chain indexer and forest in a Pipeline
       val pipeline = new Pipeline()
-        .setStages(Array(featureIndexer, rf))
-
+        .setStages(Array(mlhelp.featureIndex(df), rf))
       // Train model.  This also runs the indexer.
       val model = pipeline.fit(trainingData)
-
       // Make predictions.
       val predictions = model.transform(testData)
 
@@ -314,19 +303,11 @@ object regressors {
         .setMetricName("rmse")
       val rmse = evaluator.evaluate(predictions)
 
-      val rfModel = model.stages(1).asInstanceOf[RandomForestRegressionModel]
-      //println("Learned regression forest model:\n" + rfModel.toDebugString)
-      // get stddev of label col
       var stdev = df.agg(stddev(label)).select(label).head().getDouble(0)
 
       "Root Mean Squared Error (RMSE) on test data = " + rmse + "\n" + "Adjusted Root Mean Squared Error (RMSE) on test data/STDDEV = " + (rmse/stdev)
   }
   def gbt = (data: DataFrame, label: String, features: Array[String]) => {
-    val featureIndexer = new VectorIndexer()
-    .setInputCol("features")
-    .setOutputCol("indexedFeatures")
-    .setMaxCategories(4)
-    .fit(data)
 
     // Split the data into training and test sets (30% held out for testing)
     val Array(trainingData, testData) = data.randomSplit(Array(0.7, 0.3))
@@ -339,7 +320,7 @@ object regressors {
 
     // Chain indexer and GBT in a Pipeline
     val pipeline = new Pipeline()
-      .setStages(Array(featureIndexer, gbt))
+      .setStages(Array(mlhelp.featureIndex(data), gbt))
 
     // Train model.  This also runs the indexer.
     val model = pipeline.fit(trainingData)
