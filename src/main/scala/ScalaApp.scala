@@ -20,7 +20,7 @@ import org.joda.time.format.DateTimeFormatter._
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.classification.{ RandomForestClassificationModel, RandomForestClassifier, LogisticRegression, BinaryLogisticRegressionSummary}
 import org.apache.spark.ml.evaluation.{ MulticlassClassificationEvaluator, RegressionEvaluator }
-import org.apache.spark.ml.feature.{ IndexToString, StringIndexer, VectorIndexer, VectorAssembler, Binarizer }
+import org.apache.spark.ml.feature.{ IndexToString, StringIndexer, VectorIndexer, VectorAssembler, Binarizer, StringIndexerModel }
 import org.apache.spark.ml.regression.{ RandomForestRegressor, RandomForestRegressionModel, GBTRegressionModel, GBTRegressor}
 import org.apache.spark.ml.classification.MultilayerPerceptronClassifier
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
@@ -33,60 +33,67 @@ import org.apache.spark.mllib.evaluation._
 //spark-submit --class "basetable" --master "local[2]" --packages "com.databricks:spark-csv_2.11:1.4.0,joda-time:joda-time:2.9.3" target/scala-2.11/sample-project_2.11-1.0.jar
 
 object classifiers {
-  def rfClassifier = (data: DataFrame, label: String, features: Array[String], zone: String, instance: String) => {
-      // subset dataset for m1.medium and us-west-2a
-      //var df = data.filter("InstanceType = 'm1.medium'").filter("AvailabilityZone = 'us-west-2a'")
-      var df = data
-      val assembler = new VectorAssembler()
+  def assemble = (df: DataFrame, features: Array[String]) => {
+    val assembler = new VectorAssembler()
         .setInputCols(features)
         .setOutputCol("features")
-      // convert increase to binary variable
+    assembler.transform(df)
+  }
+  def binarize = (df: DataFrame, label: String) => {
       val binarizer: Binarizer = new Binarizer()
         .setInputCol(label)
         .setOutputCol("label")
         .setThreshold(0.5)
-
-      // prepare variables for random forest
-      df = assembler.transform(df)
-      df = binarizer.transform(df)
-      df = df.select("features", "label")
-
-      val labelIndexer = new StringIndexer()
+      binarizer.transform(df)
+  }
+  def labelIndex = (df: DataFrame) => {
+      new StringIndexer()
         .setInputCol("label")
         .setOutputCol("indexedLabel")
         .fit(df)
+  }
+  def featureIndex = (df: DataFrame) => {
       // Automatically identify categorical features, and index them.
       // Set maxCategories so features with > 4 distinct values are treated as continuous.
-      val featureIndexer = new VectorIndexer()
+      new VectorIndexer()
         .setInputCol("features")
         .setOutputCol("indexedFeatures")
         .setMaxCategories(4)
         .fit(df)
+  }
+  def labelConvert = (labelIndex: StringIndexerModel) => {
+      new IndexToString()
+        .setInputCol("prediction")
+        .setOutputCol("predictedLabel")
+        .setLabels(labelIndex.labels)
+  }
+  def rf = (data: DataFrame, label: String, features: Array[String], zone: String, instance: String) => {
 
-      // Split the data into training and test sets (30% held out for testing)
+      var df = data
+      // VECTOR ASSEMBLER
+      df = assemble(df, features)
+      // BINARIZER
+      df = binarize(df, label)
+      df = df.select("features", "label")
+      // DATASPLIT
       val Array(trainBig, test) = df.randomSplit(Array(0.8, 0.2))
       val Array(train, validation) = trainBig.randomSplit(Array(0.7, 0.3))
-
-      // Train a RandomForest model.
+      // RF INSTANTIATION
       val rf = new RandomForestClassifier()
         .setLabelCol("indexedLabel")
         .setFeaturesCol("indexedFeatures")
-      // Convert indexed labels back to original labels.
-      val labelConverter = new IndexToString()
-        .setInputCol("prediction")
-        .setOutputCol("predictedLabel")
-        .setLabels(labelIndexer.labels)
+      // PIPELINE
       val pipeline = new Pipeline()
-        .setStages(Array(labelIndexer, featureIndexer, rf, labelConverter))
-
-      // Select (prediction, true label) and compute test error
+        .setStages(Array(labelIndex(df), featureIndex(df), rf, labelConvert(labelIndex(df))))
+      // EVALUATOR
       val evaluator = new MulticlassClassificationEvaluator()
         .setLabelCol("indexedLabel")
         .setPredictionCol("prediction")
         .setMetricName("precision")
+      // Select (prediction, true label) and compute test error
 
       // Train model.  This also runs the indexers.
-      var trees = List(30,60,90,120,150,180,210,240,280,350,400, 450)
+      var trees = List(180)
       case class Prediction(val trees: Integer, val predictions: DataFrame)
       case class AUC(auc: Double, trees: Integer)
       case class Importance(val name: String, val importance: Double)
@@ -624,25 +631,24 @@ object configClass {
 
     // define features
     //val allFeatures = Array("spotPrice", "priceChange", "priceChangeLag1", "priceChangeLag2", "isIrrational", "t1", "t2", "t3", "stddev", "isVolatile", "hours", "quarter", "isWeekDay", "isDaytime")
-    val features = Array("spotPrice", "hours", "quarter", "diffMeanChange", "aggregation", "avg(spotPrice)", "stddev")
-    val labels = Array("increase", "decrease", "same")
+    val features = Array("spotPrice", "hours", "quarter", "diffMeanChange", "aggregation")
+    val labels = Array("increase", "decrease", "same", "multi")
     val couples = Array(Array("us-west-2a", "m1.medium"))
     // CONFIG RF CLASSIFIER
-    /*
+
     val accuracies = for (basetable <- basetables; couple <- couples) yield {
       // for each basetable, try out different couples
-      classifiers.rfClassifier(basetable, labels(0), features, couple(0), couple(1))
+      classifiers.rf(basetable, labels(3), features, couple(0), couple(1))
     }
     println(accuracies(0).auc.toString())
     println(accuracies(0).rank.deep.mkString("\n").toString())
-    *
-    */
+
     // CONFIG NEURAL NET
     //classifiers.neuralNet(basetables(0).filter("instanceType='m1.medium'").filter("availabilityZone='us-west-2a'"), labels(0), features)
     // CONFIG LOGISTIC CLASSIFIER
     //classifiers.logistic(basetables(0).filter("instanceType='m1.medium'").filter("availabilityZone='us-west-2a'"), labels(0), features)
     // CONFIG GBT
-    classifiers.gbt(basetables(0).filter("instanceType='m1.medium'").filter("availabilityZone='us-west-2a'"), labels(0), features)
+    //classifiers.gbt(basetables(0).filter("instanceType='m1.medium'").filter("availabilityZone='us-west-2a'"), labels(0), features)
   }
 }
 
