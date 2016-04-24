@@ -582,25 +582,27 @@ object configClass {
   def main(args: Array[String]) {
 
     //define time intervals
-    val INTERVALS = Seq(15)
+    val INTERVALS = Seq(15, 30, 60)
     val basetables = for (interval <- INTERVALS) yield helper.loadBasetable(interval)
 
     //check if loaded correctly into array
     basetables(0).show()
 
     // define features
-    //val allFeatures = Array("spotPrice", "priceChange", "priceChangeLag1", "priceChangeLag2", "isIrrational", "t1", "t2", "t3", "stddev", "isVolatile", "hours", "quarter", "isWeekDay", "isDaytime")
-    val features = Array("spotPrice", "hours", "quarter", "diffMeanChange", "aggregation")
     val labels = Array("increase", "decrease", "same", "multi")
-    val couples = Array(Array("us-west-2a", "m1.medium"))
+    val features = basetables(0).columns.diff(labels)
+    val couples = basetables(0).select("availabilityZone", "instanceType").distinct()
+    couples.show()
     // CONFIG RF CLASSIFIER
 
-    val accuracies = for (basetable <- basetables; couple <- couples) yield {
+    /*val accuracies = for (basetable <- basetables; couple <- couples) yield {
       // for each basetable, try out different couples
       classifiers.rf(basetable, labels(3), features, couple(0), couple(1))
     }
     println(accuracies(0).auc.toString())
     println(accuracies(0).rank.deep.mkString("\n").toString())
+    *
+    */
 
     // CONFIG NEURAL NET
     //classifiers.neuralNet(basetables(0).filter("instanceType='m1.medium'").filter("availabilityZone='us-west-2a'"), labels(0), features)
