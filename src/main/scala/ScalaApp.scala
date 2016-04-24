@@ -21,7 +21,7 @@ import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.classification.{ RandomForestClassificationModel, RandomForestClassifier, LogisticRegression, BinaryLogisticRegressionSummary}
 import org.apache.spark.ml.evaluation.{ MulticlassClassificationEvaluator, RegressionEvaluator }
 import org.apache.spark.ml.feature.{ IndexToString, StringIndexer, VectorIndexer, VectorAssembler, Binarizer }
-import org.apache.spark.ml.regression.{ RandomForestRegressor, RandomForestRegressionModel }
+import org.apache.spark.ml.regression.{ RandomForestRegressor, RandomForestRegressionModel, GBTRegressionModel, GBTRegressor}
 import org.apache.spark.ml.classification.MultilayerPerceptronClassifier
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 import org.apache.spark.ml.classification.{GBTClassificationModel, GBTClassifier}
@@ -33,7 +33,6 @@ import org.apache.spark.mllib.evaluation._
 //spark-submit --class "basetable" --master "local[2]" --packages "com.databricks:spark-csv_2.11:1.4.0,joda-time:joda-time:2.9.3" target/scala-2.11/sample-project_2.11-1.0.jar
 
 object classifiers {
-
   def rfClassifier = (data: DataFrame, label: String, features: Array[String], zone: String, instance: String) => {
       // subset dataset for m1.medium and us-west-2a
       //var df = data.filter("InstanceType = 'm1.medium'").filter("AvailabilityZone = 'us-west-2a'")
@@ -280,6 +279,101 @@ object classifiers {
       .setMetricName("precision")
     val accuracy = evaluator.evaluate(predictions)
     println("Test Error = " + (1.0 - accuracy))
+  }
+}
+
+object regressors {
+  def rf = (data: DataFrame, label: String, features: Array[String]) => {
+     // subset dataset for m1.medium and us-west-2a
+     // TODO: investigate whether this can be done with one filter function and is this faster ?
+      var df = data.filter("InstanceType = 'm1.medium'").filter("AvailabilityZone = 'us-west-2a'")
+
+      val assembler = new VectorAssembler()
+        .setInputCols(Array("spotPrice", "priceChange", "hours", "quarter", "isWeekDay", "isDaytime"))
+        .setOutputCol("features")
+
+      // prepare variables for random forest
+      df = assembler.transform(df)
+
+      val featureIndexer = new VectorIndexer()
+        .setInputCol("features")
+        .setOutputCol("indexedFeatures")
+        .setMaxCategories(4)
+        .fit(df)
+
+      // Split the data into training and test sets (30% held out for testing)
+      val Array(trainingData, testData) = df.randomSplit(Array(0.7, 0.3))
+
+      // Train a RandomForest model.
+      val rf = new RandomForestRegressor()
+        .setLabelCol("futurePrice")
+        .setFeaturesCol("indexedFeatures")
+
+      // Chain indexer and forest in a Pipeline
+      val pipeline = new Pipeline()
+        .setStages(Array(featureIndexer, rf))
+
+      // Train model.  This also runs the indexer.
+      val model = pipeline.fit(trainingData)
+
+      // Make predictions.
+      val predictions = model.transform(testData)
+
+      // Select example rows to display.
+      predictions.select("prediction", "futurePrice", "features").show(40)
+
+      // Select (prediction, true label) and compute test error
+      val evaluator = new RegressionEvaluator()
+        .setLabelCol("futurePrice")
+        .setPredictionCol("prediction")
+        .setMetricName("rmse")
+      val rmse = evaluator.evaluate(predictions)
+
+      val rfModel = model.stages(1).asInstanceOf[RandomForestRegressionModel]
+      //println("Learned regression forest model:\n" + rfModel.toDebugString)
+      // get stddev of label col
+      var stdev = df.agg(stddev(label)).select(label).head().getDouble(0)
+
+      "Root Mean Squared Error (RMSE) on test data = " + rmse + "\n" + "Adjusted Root Mean Squared Error (RMSE) on test data/STDDEV = " + (rmse/stdev)
+  }
+  def gbt = (data: DataFrame, label: String, features: Array[String]) => {
+    val featureIndexer = new VectorIndexer()
+    .setInputCol("features")
+    .setOutputCol("indexedFeatures")
+    .setMaxCategories(4)
+    .fit(data)
+
+    // Split the data into training and test sets (30% held out for testing)
+    val Array(trainingData, testData) = data.randomSplit(Array(0.7, 0.3))
+
+    // Train a GBT model.
+    val gbt = new GBTRegressor()
+      .setLabelCol("label")
+      .setFeaturesCol("indexedFeatures")
+      .setMaxIter(10)
+
+    // Chain indexer and GBT in a Pipeline
+    val pipeline = new Pipeline()
+      .setStages(Array(featureIndexer, gbt))
+
+    // Train model.  This also runs the indexer.
+    val model = pipeline.fit(trainingData)
+
+    // Make predictions.
+    val predictions = model.transform(testData)
+
+    // Select example rows to display.
+    predictions.select("prediction", "label", "features").show(5)
+
+    // Select (prediction, true label) and compute test error
+    val evaluator = new RegressionEvaluator()
+      .setLabelCol("label")
+      .setPredictionCol("prediction")
+      .setMetricName("rmse")
+    val rmse = evaluator.evaluate(predictions)
+    var stdev = data.agg(stddev(label)).select(label).head().getDouble(0)
+
+    "Root Mean Squared Error (RMSE) on test data = " + rmse + "\n" + "Adjusted Root Mean Squared Error (RMSE) on test data/STDDEV = " + (rmse/stdev)
   }
 }
 
@@ -559,60 +653,6 @@ object configReg {
 
     val basetables = for (interval <- INTERVALS) yield helper.loadBasetable(interval)
 
-    // START RF REGRESSION
-    def rfRegression = (data: DataFrame) => {
-
-      // subset dataset for m1.medium and us-west-2a
-      // TODO: investigate whether this can be done with one filter function and is this faster ?
-      var df = data.filter("InstanceType = 'm1.medium'").filter("AvailabilityZone = 'us-west-2a'")
-
-      val assembler = new VectorAssembler()
-        .setInputCols(Array("spotPrice", "priceChange", "hours", "quarter", "isWeekDay", "isDaytime"))
-        .setOutputCol("features")
-
-      // prepare variables for random forest
-      df = assembler.transform(df)
-
-      val featureIndexer = new VectorIndexer()
-        .setInputCol("features")
-        .setOutputCol("indexedFeatures")
-        .setMaxCategories(4)
-        .fit(df)
-
-      // Split the data into training and test sets (30% held out for testing)
-      val Array(trainingData, testData) = df.randomSplit(Array(0.7, 0.3))
-
-      // Train a RandomForest model.
-      val rf = new RandomForestRegressor()
-        .setLabelCol("futurePrice")
-        .setFeaturesCol("indexedFeatures")
-
-      // Chain indexer and forest in a Pipeline
-      val pipeline = new Pipeline()
-        .setStages(Array(featureIndexer, rf))
-
-      // Train model.  This also runs the indexer.
-      val model = pipeline.fit(trainingData)
-
-      // Make predictions.
-      val predictions = model.transform(testData)
-
-      // Select example rows to display.
-      predictions.select("prediction", "futurePrice", "features").show(40)
-
-      // Select (prediction, true label) and compute test error
-      val evaluator = new RegressionEvaluator()
-        .setLabelCol("futurePrice")
-        .setPredictionCol("prediction")
-        .setMetricName("rmse")
-      val rmse = evaluator.evaluate(predictions)
-
-      val rfModel = model.stages(1).asInstanceOf[RandomForestRegressionModel]
-      //println("Learned regression forest model:\n" + rfModel.toDebugString)
-
-      "Root Mean Squared Error (RMSE) on test data = " + rmse
-    }
-
     val RMSE = for (basetable <- basetables) yield rfRegression(basetable)
 
     RMSE.foreach { println }
@@ -632,6 +672,14 @@ object statistics {
 
     case class Correlation(val feat1: String, val feat2: String, val corr: Double)
 
+    val visual = df.filter("instanceType='m1.medium'").filter("availabilityZone= 'us-west-2a'").select("spotPrice", "aggregation").coalesce(1)
+        .write.format("com.databricks.spark.csv")
+        .option("header", "true")
+        .mode(SaveMode.Overwrite)
+        .save("../thesis-data/series.csv")
+    val density = df.groupBy("availabilityZone", "instanceType", "date").count()
+    val avg = density.groupBy("availabilityZone", "instanceType").mean("count").show()
+        /*
     val corrIncrease = for (feature <- corFeatures) yield  feature + ": " +  df.stat.corr(feature, "increase")
     val corrFuture = for (feature <- corFeatures) yield  feature + ": " +  df.stat.corr(feature, "futurePrice")
     var corrs = for(i <- corFeatures; j <- corFeatures) yield {
@@ -657,6 +705,8 @@ object statistics {
     println("### CORRELATIONS BETWEEN FEATURES")
     val sorted = corrs.sortWith(_.corr > _.corr)
     println(sorted.deep.mkString("\n"))
+    *
+    */
   }
 }
 
