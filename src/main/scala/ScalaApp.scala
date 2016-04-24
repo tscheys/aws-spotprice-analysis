@@ -69,7 +69,7 @@ object mlhelp {
 }
 
 object classifiers {
-  def rf = (data: DataFrame, label: String, features: Array[String], zone: String, instance: String) => {
+  def rf = (data: DataFrame, label: String, features: Array[String]) => {
 
       var df = data
       // VECTOR ASSEMBLER
@@ -434,8 +434,8 @@ object helper {
   }
 
   // load a basetable with a certain interval
-  def loadBasetable = (interval: Int) => {
-    getContext
+  def loadBasetable = (interval: Int, context: HiveContext) => {
+    context
       .read
       .format("com.databricks.spark.csv")
       .option("header", "true") // Use first line of all files as header
@@ -583,7 +583,8 @@ object configClass {
 
     //define time intervals
     val INTERVALS = Seq(15, 30, 60)
-    val basetables = for (interval <- INTERVALS) yield helper.loadBasetable(interval)
+    val context = helper.getContext
+    val basetables = for (interval <- INTERVALS) yield helper.loadBasetable(interval, context)
 
     //check if loaded correctly into array
     basetables(0).show()
@@ -591,21 +592,20 @@ object configClass {
     // define features
     val labels = Array("increase", "decrease", "same", "multi")
     val features = basetables(0).columns.diff(labels)
-    val couples = basetables(0).select("availabilityZone", "instanceType").distinct()
-    couples.show()
+    val couplesDF = basetables(0).select("availabilityZone", "instanceType").distinct()
+    val couples = couplesDF.rdd.map(x => (x(0).asInstanceOf[String], x(1).asInstanceOf[String])).collect()
     // CONFIG RF CLASSIFIER
 
-    /*val accuracies = for (basetable <- basetables; couple <- couples) yield {
+    // MULTICLASS CLASSIFIERS (MULTI LABEL)
+    val accuracies = for (basetable <- basetables; couple <- couples.toSeq) yield {
       // for each basetable, try out different couples
-      classifiers.rf(basetable, labels(3), features, couple(0), couple(1))
+      var subset = basetable.filter("availabilityZone = '" + couple._1 + "'").filter("instanceType = '"+ couple._2 +"'")
+      Array(Array("Basetable", couple._1, couple._2, labels(3), "RFMULTI, NNMULTI"),classifiers.rf(subset, labels(3), features), classifiers.neuralNet(basetables(0), labels(3), features))
     }
-    println(accuracies(0).auc.toString())
-    println(accuracies(0).rank.deep.mkString("\n").toString())
-    *
-    */
+    //println(accuracies(0).auc.toString())
+    //println(accuracies(0).rank.deep.mkString("\n").toString())
+    accuracies.foreach(x => println(x(0), x(1), x(2)))
 
-    // CONFIG NEURAL NET
-    //classifiers.neuralNet(basetables(0).filter("instanceType='m1.medium'").filter("availabilityZone='us-west-2a'"), labels(0), features)
     // CONFIG LOGISTIC CLASSIFIER
     //classifiers.logistic(basetables(0).filter("instanceType='m1.medium'").filter("availabilityZone='us-west-2a'"), labels(0), features)
     // CONFIG GBT
@@ -618,8 +618,8 @@ object configReg {
 
     //define time intervals
     var INTERVALS = Seq(60)
-
-    val basetables = for (interval <- INTERVALS) yield helper.loadBasetable(interval)
+    val context = helper.getContext
+    val basetables = for (interval <- INTERVALS) yield helper.loadBasetable(interval, context)
     // features en labels definieren
 
     //val RMSE = for (basetable <- basetables) yield regressors.rfRegression(basetable)
@@ -632,7 +632,8 @@ object configReg {
 object statistics {
   def main(args: Array[String]) {
     // should be for all three
-    val df = helper.loadBasetable(60)
+    val context = helper.getContext
+    val df = helper.loadBasetable(60, context)
 
     // TODO: get list of string variables dynamically
     // create val with y-var names
@@ -686,7 +687,8 @@ object statistics {
 
 object testing {
   def main(args: Array[String]) {
-    val df = helper.loadBasetable(60)
+    val context = helper.getContext
+    val df = helper.loadBasetable(60, context)
     df.printSchema()
 
     // do reporting on asz and instances
