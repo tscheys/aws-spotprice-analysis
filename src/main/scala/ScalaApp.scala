@@ -31,9 +31,8 @@ import org.apache.spark.mllib.evaluation._
 
 //spark submit command:
 //spark-submit --class "basetable" --master "local[2]" --packages "com.databricks:spark-csv_2.11:1.4.0,joda-time:joda-time:2.9.3" target/scala-2.11/sample-project_2.11-1.0.jar
-
-object classifiers {
-  def assemble = (df: DataFrame, features: Array[String]) => {
+object mlhelp {
+    def assemble = (df: DataFrame, features: Array[String]) => {
     val assembler = new VectorAssembler()
         .setInputCols(features)
         .setOutputCol("features")
@@ -67,14 +66,19 @@ object classifiers {
         .setOutputCol("predictedLabel")
         .setLabels(labelIndex.labels)
   }
+}
+
+object classifiers {
   def rf = (data: DataFrame, label: String, features: Array[String], zone: String, instance: String) => {
 
       var df = data
       // VECTOR ASSEMBLER
-      df = assemble(df, features)
-      // BINARIZER
-      df = binarize(df, label)
+      df = mlhelp.assemble(df, features)
+      // MULTICLASS VECTOR (FORMERLY BINARIZE)
+      //df = binarize(df, label)
+      df = df.withColumn("label", col(label))
       df = df.select("features", "label")
+      df.show()
       // DATASPLIT
       val Array(trainBig, test) = df.randomSplit(Array(0.8, 0.2))
       val Array(train, validation) = trainBig.randomSplit(Array(0.7, 0.3))
@@ -84,7 +88,7 @@ object classifiers {
         .setFeaturesCol("indexedFeatures")
       // PIPELINE
       val pipeline = new Pipeline()
-        .setStages(Array(labelIndex(df), featureIndex(df), rf, labelConvert(labelIndex(df))))
+        .setStages(Array(mlhelp.labelIndex(df), mlhelp.featureIndex(df), rf, mlhelp.labelConvert(mlhelp.labelIndex(df))))
       // EVALUATOR
       val evaluator = new MulticlassClassificationEvaluator()
         .setLabelCol("indexedLabel")
@@ -168,15 +172,16 @@ object classifiers {
       df
   }
   def neuralNet = (data: DataFrame, label: String, features: Array[String]) => {
-
     // Split the data into train and test
-    // import data
-    var df = prepare(data, label, features)
+    var df = mlhelp.assemble(data, features)
+    df = mlhelp.binarize(df, label)
+    df = df.select("features", "label")
+
+    mlhelp.labelIndex(df)
+    mlhelp.featureIndex(df)
 
     val Array(train, test) = df.randomSplit(Array(0.6, 0.4))
     // specify layers for the neural network:
-    // input layer of size 4 (features), two intermediate of size 5 and 4
-    // and output of size 3 (classes)
     val layers = Array[Int](features.length, 30, 30, 30, 2)
     // create the trainer and set its parameters
     val trainer = new MultilayerPerceptronClassifier()
@@ -195,7 +200,12 @@ object classifiers {
   }
 
   def logistic = (data: DataFrame, label: String, features: Array[String]) => {
-    var df = prepare(data, label, features)
+    var df = mlhelp.assemble(data, features)
+    df = mlhelp.binarize(df, label)
+    df = df.select("features", "label")
+
+    mlhelp.labelIndex(df)
+    mlhelp.featureIndex(df)
     val Array(training, test) = df.randomSplit(Array(0.7,0.3))
     val lr = new LogisticRegression()
       .setMaxIter(10)
@@ -224,32 +234,12 @@ object classifiers {
 
   def gbt = (data: DataFrame, label: String, features: Array[String]) => {
     // Split the data into training and test sets (30% held out for testing)
-    var df = data
-    val assembler = new VectorAssembler()
-        .setInputCols(features)
-        .setOutputCol("features")
-    // convert increase to binary variable
-    val binarizer: Binarizer = new Binarizer()
-        .setInputCol(label)
-        .setOutputCol("label")
-        .setThreshold(0.5)
-
-      // prepare variables for random forest
-    df = assembler.transform(df)
-    df = binarizer.transform(df)
+    var df = mlhelp.assemble(data, features)
+    df = mlhelp.binarize(df, label)
     df = df.select("features", "label")
 
-    val labelIndexer = new StringIndexer()
-      .setInputCol("label")
-      .setOutputCol("indexedLabel")
-      .fit(df)
-    // Automatically identify categorical features, and index them.
-    // Set maxCategories so features with > 4 distinct values are treated as continuous.
-    val featureIndexer = new VectorIndexer()
-      .setInputCol("features")
-      .setOutputCol("indexedFeatures")
-      .setMaxCategories(4)
-      .fit(df)
+    mlhelp.labelIndex(df)
+    mlhelp.featureIndex(df)
 
     // Split the data into training and test sets (30% held out for testing)
     val Array(trainingData, testData) = df.randomSplit(Array(0.7, 0.3))
@@ -260,17 +250,11 @@ object classifiers {
       .setFeaturesCol("indexedFeatures")
       .setMaxIter(10)
 
-    // Convert indexed labels back to original labels.
-    val labelConverter = new IndexToString()
-      .setInputCol("prediction")
-      .setOutputCol("predictedLabel")
-      .setLabels(labelIndexer.labels)
-
-// Chain indexers and GBT in a Pipeline
+    // Chain indexers and GBT in a Pipeline
     val pipeline = new Pipeline()
-      .setStages(Array(labelIndexer, featureIndexer, gbt, labelConverter))
+      .setStages(Array(mlhelp.labelIndex(df), mlhelp.featureIndex(df), gbt, mlhelp.labelConvert(mlhelp.labelIndex(df))))
 
-// Train model.  This also runs the indexers.
+    // Train model.  This also runs the indexers.
     val model = pipeline.fit(trainingData)
 
     // Make predictions.
@@ -292,15 +276,9 @@ object classifiers {
 object regressors {
   def rf = (data: DataFrame, label: String, features: Array[String]) => {
      // subset dataset for m1.medium and us-west-2a
-     // TODO: investigate whether this can be done with one filter function and is this faster ?
-      var df = data.filter("InstanceType = 'm1.medium'").filter("AvailabilityZone = 'us-west-2a'")
-
-      val assembler = new VectorAssembler()
-        .setInputCols(Array("spotPrice", "priceChange", "hours", "quarter", "isWeekDay", "isDaytime"))
-        .setOutputCol("features")
 
       // prepare variables for random forest
-      df = assembler.transform(df)
+      var df = mlhelp.assemble(data, features)
 
       val featureIndexer = new VectorIndexer()
         .setInputCol("features")
@@ -570,17 +548,17 @@ object basetable {
         lead(a.spotPrice) OVER (PARTITION BY a.AvailabilityZone, a.InstanceType ORDER BY a.aggregation) AS futurePrice
         FROM labelData a""")
 
-      def change = udf((inc: Double, decr: Double, same: Double) => {
-        if(inc == 1.0) 3
-        else if (decr == 1.0) 1
-        else if (same == 1.0) 2
-        4
+      def change = udf((in: Double, de: Double, sa: Double) => {
+        if(in > 0.0) 2
+        else if (sa > 0.0 ) 1
+        else if (de > 0.0) 0
+        else 3
       })
       df = df
         .withColumn("increase", col("increase").cast("Double"))
         .withColumn("decrease", col("decrease").cast("Double"))
         .withColumn("same", col("same").cast("Double"))
-        .withColumn("multi", change(col("increase"), col("decrease"), col("same")).cast("Double"))
+        .withColumn("multi", change(col("increase"), col("decrease"), col("same").cast("Double")))
 
       // remove null rows created by performing a lead
       println("Loss by dropping NA's: " + df.count())
