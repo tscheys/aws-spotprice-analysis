@@ -489,7 +489,7 @@ object basetable {
   def main(args: Array[String]) {
     val sqlContext = helper.getContext
     val df = sqlContext.read.json("/Users/tscheys/ScalaApp/aws.json")
-    val INTERVALS = Seq(15)
+    val INTERVALS = Seq(15, 30, 60)
 
     // makes basetable for different time aggregation intervals
     // we will call this function 3 times: for 15, 30 and 60 minutes
@@ -576,8 +576,9 @@ object basetable {
         .withColumn("multi", change(col("increase"), col("decrease"), col("same")))
 
       // remove null rows created by performing a lead
-
+      println("Loss by dropping NA's: " + df.count())
       df = df.na.drop()
+      println(df.count())
       // check if lag() was done correctly
 
       // get statistics avg, max, min, stddev
