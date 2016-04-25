@@ -539,7 +539,7 @@ object basetable {
         .withColumn("increase", col("increase").cast("Double"))
         .withColumn("decrease", col("decrease").cast("Double"))
         .withColumn("same", col("same").cast("Double"))
-        .withColumn("multi", change(col("increase"), col("decrease"), col("same").cast("Double")))
+        .withColumn("multi", change(col("increase"), col("decrease"), col("same")).cast("Double"))
 
       // remove null rows created by performing a lead
       println("Loss by dropping NA's: " + df.count())
@@ -590,27 +590,21 @@ object configClass {
     basetables(0).show()
 
     // define features
-    val labels = Array("increase", "decrease", "same", "multi")
-    val features = basetables(0).columns.diff(labels)
+    val labels = Array("increase", "decrease", "same", "multi", "futurePrice")
+    val strings = Array("TimeStamp", "availabilityZone", "instanceType","date")
+    val features = basetables(0).columns.diff(labels).diff(strings)
     val couplesDF = basetables(0).select("availabilityZone", "instanceType").distinct()
     val couples = couplesDF.rdd.map(x => (x(0).asInstanceOf[String], x(1).asInstanceOf[String])).collect()
     // CONFIG RF CLASSIFIER
 
     // MULTICLASS CLASSIFIERS (MULTI LABEL)
-    val accuracies = for (basetable <- basetables.take(1); couple <- couples.take(2).toSeq) yield {
+    val accuracies = for (basetable <- basetables; couple <- couples.toSeq) yield {
       // for each basetable, try out different couples
       var subset = basetable.filter("availabilityZone = '" + couple._1 + "'").filter("instanceType = '"+ couple._2 +"'")
       (Array("Basetable 15 30 60", couple._1, couple._2, labels(3), "RFMULTI, NNMULTI"),classifiers.rf(subset, labels(3), features), classifiers.neuralNet(basetables(0), labels(3), features))
     }
-    //println(accuracies(0).auc.toString())
-    //println(accuracies(0).rank.deep.mkString("\n").toString())
 
-    accuracies.foreach(x => println(x._1.toString(), x._2.auc.toString(), x._2.rank.deep.mkString("\n").toString(), x._3.toString()))
-
-    // CONFIG LOGISTIC CLASSIFIER
-    //classifiers.logistic(basetables(0).filter("instanceType='m1.medium'").filter("availabilityZone='us-west-2a'"), labels(0), features)
-    // CONFIG GBT
-    //classifiers.gbt(basetables(0).filter("instanceType='m1.medium'").filter("availabilityZone='us-west-2a'"), labels(0), features)
+    accuracies.foreach(x => println("######## \n", x._1.deep.toString(), "\n\n\n\n", x._2.auc.toString(), "\n\n\n\n" ,x._2.rank.deep.mkString("\n").toString(), "\n\n\n\n" ,x._3.toString()))
   }
 }
 
@@ -618,14 +612,22 @@ object configReg {
   def main(args: Array[String]) {
 
     //define time intervals
-    var INTERVALS = Seq(60)
+    var INTERVALS = Seq(15,30,60)
     val context = helper.getContext
     val basetables = for (interval <- INTERVALS) yield helper.loadBasetable(interval, context)
     // features en labels definieren
+        // define features
+    val labels = Array("increase", "decrease", "same", "multi", "futurePrice")
+    val strings = Array("TimeStamp", "availabilityZone", "instanceType","date")
+    val features = basetables(0).columns.diff(labels).diff(strings)
+    val couplesDF = basetables(0).select("availabilityZone", "instanceType").distinct()
+    val couples = couplesDF.rdd.map(x => (x(0).asInstanceOf[String], x(1).asInstanceOf[String])).collect()
 
-    //val RMSE = for (basetable <- basetables) yield regressors.rfRegression(basetable)
+    val RMSE = for (basetable <- basetables; couple <- couples) yield {
+      (couple._1, couple._2,regressors.rf(basetable, labels(4), features), regressors.gbt(basetable, labels(4), features))
+      }
 
-    //RMSE.foreach { println }
+    RMSE.foreach(x => println(x._1, x._2, x._3, x._4))
 
   }
 }
