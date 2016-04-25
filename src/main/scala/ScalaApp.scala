@@ -193,7 +193,7 @@ object classifiers {
     val predictionAndLabels = result.select("prediction", "label")
     val evaluator = new MulticlassClassificationEvaluator()
       .setMetricName("precision")
-    println("Precision:" + evaluator.evaluate(predictionAndLabels))
+    "Precision:" + evaluator.evaluate(predictionAndLabels)
   }
 
   def logistic = (data: DataFrame, label: String, features: Array[String]) => {
@@ -597,14 +597,15 @@ object configClass {
     // CONFIG RF CLASSIFIER
 
     // MULTICLASS CLASSIFIERS (MULTI LABEL)
-    val accuracies = for (basetable <- basetables; couple <- couples.toSeq) yield {
+    val accuracies = for (basetable <- basetables.take(1); couple <- couples.take(2).toSeq) yield {
       // for each basetable, try out different couples
       var subset = basetable.filter("availabilityZone = '" + couple._1 + "'").filter("instanceType = '"+ couple._2 +"'")
-      Array(Array("Basetable", couple._1, couple._2, labels(3), "RFMULTI, NNMULTI"),classifiers.rf(subset, labels(3), features), classifiers.neuralNet(basetables(0), labels(3), features))
+      (Array("Basetable 15 30 60", couple._1, couple._2, labels(3), "RFMULTI, NNMULTI"),classifiers.rf(subset, labels(3), features), classifiers.neuralNet(basetables(0), labels(3), features))
     }
     //println(accuracies(0).auc.toString())
     //println(accuracies(0).rank.deep.mkString("\n").toString())
-    accuracies.foreach(x => println(x(0), x(1), x(2)))
+
+    accuracies.foreach(x => println(x._1.toString(), x._2.auc.toString(), x._2.rank.deep.mkString("\n").toString(), x._3.toString()))
 
     // CONFIG LOGISTIC CLASSIFIER
     //classifiers.logistic(basetables(0).filter("instanceType='m1.medium'").filter("availabilityZone='us-west-2a'"), labels(0), features)
