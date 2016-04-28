@@ -615,20 +615,21 @@ object configReg {
     //define time intervals
     var INTERVALS = Seq(15,30,60)
     val context = helper.getContext
-    val basetables = for (interval <- INTERVALS) yield helper.loadBasetable(interval, context)
+    val basetables = for (interval <- INTERVALS) yield (helper.loadBasetable(interval, context), interval)
     // features en labels definieren
         // define features
     val labels = Array("increase", "decrease", "same", "multi", "futurePrice")
     val strings = Array("TimeStamp", "availabilityZone", "instanceType","date")
-    val features = basetables(0).columns.diff(labels).diff(strings)
-    val couplesDF = basetables(0).select("availabilityZone", "instanceType").distinct()
+    val features = basetables(0)._1.columns.diff(labels).diff(strings)
+    val selectFeatures = Array("priceChange", "spotPrice", "diffMeanSpot", "t1","diffMeanChange")
+    val couplesDF = basetables(0)._1.select("availabilityZone", "instanceType").distinct()
     val couples = couplesDF.rdd.map(x => (x(0).asInstanceOf[String], x(1).asInstanceOf[String])).collect()
 
-    val RMSE = for (basetable <- basetables; couple <- couples) yield {
-      (couple._1, couple._2,regressors.rf(basetable, labels(4), features), regressors.gbt(basetable, labels(4), features))
+    val RMSE = for (basetable <- basetables; couple <- couples.take(4)) yield {
+      (basetable._2, couple._1, couple._2,regressors.rf(basetable._1, labels(4), selectFeatures), regressors.gbt(basetable._1, labels(4), selectFeatures))
       }
 
-    RMSE.foreach(x => println(x._1, x._2, x._3, x._4))
+    RMSE.foreach(x => println(x._1, x._2, x._3, x._4, x._5))
 
   }
 }
