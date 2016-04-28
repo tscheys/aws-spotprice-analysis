@@ -97,7 +97,7 @@ object classifiers {
       // Select (prediction, true label) and compute test error
 
       // Train model.  This also runs the indexers.
-      var trees = List(180)
+      var trees = List(50, 80, 100, 120, 140, 160,180,200,220,260,300,350,400)
       case class Prediction(val trees: Integer, val predictions: DataFrame)
       case class AUC(auc: Double, trees: Integer)
       case class Importance(val name: String, val importance: Double)
@@ -129,7 +129,6 @@ object classifiers {
       //val accuracy = evaluator.evaluate(predictions)
       val importances = model.stages(2).asInstanceOf[RandomForestClassificationModel].featureImportances
 
-      println(importances)
       val indices = importances.toSparse.indices
       val zipped = for(index <- indices) yield {
         val value = importances(index)
@@ -138,7 +137,6 @@ object classifiers {
       }
 
       val ranking = zipped.sortWith(_.importance > _.importance)
-      println(ranking.deep.toString())
       case class Report(val auc: List[AUC], val rank: Array[Importance])
       Report(aucs, ranking)
     }
@@ -582,29 +580,32 @@ object configClass {
   def main(args: Array[String]) {
 
     //define time intervals
-    val INTERVALS = Seq(15, 30, 60)
+    val INTERVALS = Seq(15,60)
     val context = helper.getContext
-    val basetables = for (interval <- INTERVALS) yield helper.loadBasetable(interval, context)
+    val basetables = for (interval <- INTERVALS) yield (helper.loadBasetable(interval, context), interval)
 
     //check if loaded correctly into array
-    basetables(0).show()
+    //basetables(0).show()
 
     // define features
     val labels = Array("increase", "decrease", "same", "multi", "futurePrice")
     val strings = Array("TimeStamp", "availabilityZone", "instanceType","date")
-    val features = basetables(0).columns.diff(labels).diff(strings)
-    val couplesDF = basetables(0).select("availabilityZone", "instanceType").distinct()
+    val features = basetables(0)._1.columns.diff(labels).diff(strings)
+    val selectFeatures = Array("priceChange", "spotPrice", "diffMeanSpot", "t1","diffMeanChange")
+    val couplesDF = basetables(0)._1.select("availabilityZone", "instanceType").distinct()
     val couples = couplesDF.rdd.map(x => (x(0).asInstanceOf[String], x(1).asInstanceOf[String])).collect()
     // CONFIG RF CLASSIFIER
 
     // MULTICLASS CLASSIFIERS (MULTI LABEL)
-    val accuracies = for (basetable <- basetables; couple <- couples.toSeq) yield {
+
+    //classifiers.neuralNet(basetable._1, labels(3), features)
+    val accuracies = for (basetable <- basetables; couple <- couples.take(1).toSeq) yield {
       // for each basetable, try out different couples
-      var subset = basetable.filter("availabilityZone = '" + couple._1 + "'").filter("instanceType = '"+ couple._2 +"'")
-      (Array("Basetable 15 30 60", couple._1, couple._2, labels(3), "RFMULTI, NNMULTI"),classifiers.rf(subset, labels(3), features), classifiers.neuralNet(basetables(0), labels(3), features))
+      var subset = basetable._1.filter("availabilityZone = '" + couple._1 + "'").filter("instanceType = '"+ couple._2 +"'")
+      (Array(basetable._2, couple._1, couple._2, labels(3), "RFMULTI"), classifiers.rf(subset, labels(3), selectFeatures))
     }
 
-    accuracies.foreach(x => println("######## \n", x._1.deep.toString(), "\n\n\n\n", x._2.auc.toString(), "\n\n\n\n" ,x._2.rank.deep.mkString("\n").toString(), "\n\n\n\n" ,x._3.toString()))
+    accuracies.foreach(x => println("######## \n", x._1.deep.mkString("\n").toString(), "\n\n\n\n", x._2.auc.mkString("\n").toString(), "\n\n\n\n" ,x._2.rank.deep.mkString("\n").toString(), "\n\n\n\n"))
   }
 }
 
