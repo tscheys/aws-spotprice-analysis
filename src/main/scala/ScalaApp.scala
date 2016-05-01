@@ -301,14 +301,17 @@ object regressors {
         .setMetricName("rmse")
       val rmse = evaluator.evaluate(predictions)
 
-      var stdev = df.agg(stddev(label)).select(label).head().getDouble(0)
+      var stdev = df.agg(stddev(label)).select("stddev_samp(futurePrice,0,0)").head().getDouble(0)
 
       "Root Mean Squared Error (RMSE) on test data = " + rmse + "\n" + "Adjusted Root Mean Squared Error (RMSE) on test data/STDDEV = " + (rmse/stdev)
   }
   def gbt = (data: DataFrame, label: String, features: Array[String]) => {
 
     // Split the data into training and test sets (30% held out for testing)
-    val Array(trainingData, testData) = data.randomSplit(Array(0.7, 0.3))
+    var df = mlhelp.assemble(data, features)
+    df = df.withColumn("label", col("futurePrice"))
+    df = df.select("features", "label")
+    val Array(trainingData, testData) = df.randomSplit(Array(0.7, 0.3))
 
     // Train a GBT model.
     val gbt = new GBTRegressor()
@@ -318,7 +321,7 @@ object regressors {
 
     // Chain indexer and GBT in a Pipeline
     val pipeline = new Pipeline()
-      .setStages(Array(mlhelp.featureIndex(data), gbt))
+      .setStages(Array(mlhelp.featureIndex(df), gbt))
 
     // Train model.  This also runs the indexer.
     val model = pipeline.fit(trainingData)
@@ -335,7 +338,7 @@ object regressors {
       .setPredictionCol("prediction")
       .setMetricName("rmse")
     val rmse = evaluator.evaluate(predictions)
-    var stdev = data.agg(stddev(label)).select(label).head().getDouble(0)
+    var stdev = data.agg(stddev(label)).select("stddev_samp(futurePrice,0,0)").head().getDouble(0)
 
     "Root Mean Squared Error (RMSE) on test data = " + rmse + "\n" + "Adjusted Root Mean Squared Error (RMSE) on test data/STDDEV = " + (rmse/stdev)
   }
