@@ -97,7 +97,7 @@ object classifiers {
       // Select (prediction, true label) and compute test error
 
       // Train model.  This also runs the indexers.
-      var trees = List(50, 80, 100, 120, 140, 160,180,200,220,260,300,350,400)
+      var trees = List(50, 70, 90, 110, 130, 150,170,190,210,230,250,270, 290, 310, 330, 350, 370, 390)
       case class Prediction(val trees: Integer, val predictions: DataFrame)
       case class AUC(auc: Double, trees: Integer)
       case class Importance(val name: String, val importance: Double)
@@ -172,26 +172,47 @@ object classifiers {
   def neuralNet = (data: DataFrame, label: String, features: Array[String]) => {
     // Split the data into train and test
     var df = mlhelp.assemble(data, features)
+    val Array(trainBig, test) = df.randomSplit(Array(0.8, 0.2))
+    val Array(train, validation) = trainBig.randomSplit(Array(0.7, 0.3))
     df = mlhelp.binarize(df, label)
     df = df.select("features", "label")
 
-    val Array(train, test) = df.randomSplit(Array(0.6, 0.4))
     // specify layers for the neural network:
-    val layers = Array(features.length, 30, 30, 30, 3)
+    val layer0 = Array(features.length, 5, 5, 5, 3)
+    val layer1 = Array(features.length, 10, 10, 10, 3)
+    val layer2 = Array(features.length, 5, 5, 3)
+    val layer3 = Array(features.length, 10, 10, 3)
+    val tuning = Array(Array(features.length, 5, 5, 5, 3),Array(features.length, 10, 10, 10, 3),Array(features.length, 5, 5, 3),Array(features.length, 10, 10, 3))
+    val maxiters = Array(100, 200, 300,400)
     // create the trainer and set its parameters
-    val trainer = new MultilayerPerceptronClassifier()
-      .setLayers(layers)
+    case class Precision (val layer: Array[Int], val maxiter: Int, val evaluation: Double )
+
+    def trainer = (layer: Array[Int], max: Int, train: DataFrame) => {
+      val trainer = new MultilayerPerceptronClassifier()
+      .setLayers(layer)
       .setBlockSize(128)
       .setSeed(1234L)
-      .setMaxIter(100)
-    // train the model
-    val model = trainer.fit(train)
-    // compute precision on the test set
-    val result = model.transform(test)
-    val predictionAndLabels = result.select("prediction", "label")
-    val evaluator = new MulticlassClassificationEvaluator()
-      .setMetricName("precision")
-    "Precision:" + evaluator.evaluate(predictionAndLabels)
+      .setMaxIter(max)
+      // train the model
+      val model = trainer.fit(train)
+      // compute precision on the test set
+      val result = model.transform(test)
+      val predictionAndLabels = result.select("prediction", "label")
+      val evaluator = new MulticlassClassificationEvaluator()
+        .setMetricName("precision")
+      // return
+      Precision(layer, max, evaluator.evaluate(predictionAndLabels))
+    }
+    val output: Array[Precision]= for (layer <- tuning; maxiter <- maxiters) yield {
+      trainer(layer, maxiter, train)
+    }
+    // implement
+    val sorted = output.sortWith(_.evaluation > _.evaluation)
+    val best = sorted(0)
+
+    // train best on trainbig
+    val bestTrained = trainer(best.layer, best.maxiter, trainBig)
+    Array(bestTrained, sorted)
   }
 
   def logistic = (data: DataFrame, label: String, features: Array[String]) => {
@@ -282,6 +303,7 @@ object regressors {
       val rf = new RandomForestRegressor()
         .setLabelCol("futurePrice")
         .setFeaturesCol("indexedFeatures")
+        .setNumTrees(trees)
 
       // Chain indexer and forest in a Pipeline
       val pipeline = new Pipeline()
@@ -600,15 +622,20 @@ object configClass {
     // CONFIG RF CLASSIFIER
 
     // MULTICLASS CLASSIFIERS (MULTI LABEL)
-
-    //classifiers.neuralNet(basetable._1, labels(3), features)
-    val accuracies = for (basetable <- basetables; couple <- couples.take(1).toSeq) yield {
+    val rf = for (basetable <- basetables; couple <- couples.take(1).toSeq) yield {
       // for each basetable, try out different couples
       var subset = basetable._1.filter("availabilityZone = '" + couple._1 + "'").filter("instanceType = '"+ couple._2 +"'")
-      (Array(basetable._2, couple._1, couple._2, labels(3), "RFMULTI"), classifiers.rf(subset, labels(3), selectFeatures))
+      (Array(basetable._2, couple._1, couple._2, labels(3)), classifiers.rf(subset, labels(3), selectFeatures))
     }
 
-    accuracies.foreach(x => println("######## \n", x._1.deep.mkString("\n").toString(), "\n\n\n\n", x._2.auc.mkString("\n").toString(), "\n\n\n\n" ,x._2.rank.deep.mkString("\n").toString(), "\n\n\n\n"))
+    val nn = for (basetable <- basetables; couple <- couples.take(1).toSeq) yield {
+      // for each basetable, try out different couples
+      var subset = basetable._1.filter("availabilityZone = '" + couple._1 + "'").filter("instanceType = '"+ couple._2 +"'")
+      (Array(basetable._2, couple._1, couple._2, labels(3)), classifiers.neuralNet(subset, labels(3), features))
+    }
+
+    rf.foreach(x => println("######## \n", x._1.deep.mkString("\n").toString(), "\n\n\n\n", x._2.auc.mkString("\n").toString(), "\n\n\n\n" ,x._2.rank.deep.mkString("\n").toString(), "\n\n\n\n"))
+    nn.foreach(x => println("######## \n", x._1.deep.mkString("\n").toString(), "\n\n\n\n", x._2.deep.mkString("\n")))
   }
 }
 
