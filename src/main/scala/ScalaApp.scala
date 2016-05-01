@@ -172,10 +172,10 @@ object classifiers {
   def neuralNet = (data: DataFrame, label: String, features: Array[String]) => {
     // Split the data into train and test
     var df = mlhelp.assemble(data, features)
-    val Array(trainBig, test) = df.randomSplit(Array(0.8, 0.2))
-    val Array(train, validation) = trainBig.randomSplit(Array(0.7, 0.3))
     df = mlhelp.binarize(df, label)
     df = df.select("features", "label")
+    val Array(trainBig, test) = df.randomSplit(Array(0.8, 0.2))
+    val Array(train, validation) = trainBig.randomSplit(Array(0.7, 0.3))
 
     // specify layers for the neural network:
     val layer0 = Array(features.length, 5, 5, 5, 3)
@@ -297,35 +297,50 @@ object regressors {
       var df = mlhelp.assemble(data, features)
 
       // Split the data into training and test sets (30% held out for testing)
-      val Array(trainingData, testData) = df.randomSplit(Array(0.7, 0.3))
-
+      //val Array(trainingData, testData) = df.randomSplit(Array(0.7, 0.3))
+      // DATASPLIT
+      val Array(trainBig, test) = df.randomSplit(Array(0.8, 0.2))
+      val Array(train, validation) = trainBig.randomSplit(Array(0.7, 0.3))
       // Train a RandomForest model.
-      val rf = new RandomForestRegressor()
+
+      var trees = List(50, 70, 90, 110, 130, 150,170,190,210,230,250,270, 290, 310, 330, 350, 370, 390)
+      case class Prediction(rmse: Double, adj: Double, tree: Int)
+      def trainer = (tree: Int, set: DataFrame) => {
+        val rf = new RandomForestRegressor()
         .setLabelCol("futurePrice")
         .setFeaturesCol("indexedFeatures")
-        .setNumTrees(trees)
+        .setNumTrees(tree)
 
-      // Chain indexer and forest in a Pipeline
-      val pipeline = new Pipeline()
-        .setStages(Array(mlhelp.featureIndex(df), rf))
-      // Train model.  This also runs the indexer.
-      val model = pipeline.fit(trainingData)
-      // Make predictions.
-      val predictions = model.transform(testData)
+        // Chain indexer and forest in a Pipeline
+        val pipeline = new Pipeline()
+          .setStages(Array(mlhelp.featureIndex(df), rf))
+        // Train model.  This also runs the indexer.
+        val model = pipeline.fit(set)
+        // Make predictions.
+        val predictions = model.transform(test)
 
-      // Select example rows to display.
-      predictions.select("prediction", "futurePrice", "features").show(40)
+        // Select example rows to display.
+        predictions.select("prediction", "futurePrice", "features").show(40)
 
-      // Select (prediction, true label) and compute test error
-      val evaluator = new RegressionEvaluator()
-        .setLabelCol("futurePrice")
-        .setPredictionCol("prediction")
-        .setMetricName("rmse")
-      val rmse = evaluator.evaluate(predictions)
+        // Select (prediction, true label) and compute test error
+        val evaluator = new RegressionEvaluator()
+          .setLabelCol("futurePrice")
+          .setPredictionCol("prediction")
+          .setMetricName("rmse")
+        val rmse = evaluator.evaluate(predictions)
 
-      var stdev = df.agg(stddev(label)).select("stddev_samp(futurePrice,0,0)").head().getDouble(0)
+        var stdev = df.agg(stddev(label)).select("stddev_samp(futurePrice,0,0)").head().getDouble(0)
+        Prediction(rmse, rmse/stdev, tree)
+      }
+      val output = for(tree <- trees) yield {
+        trainer(tree, validation)
 
-      "Root Mean Squared Error (RMSE) on test data = " + rmse + "\n" + "Adjusted Root Mean Squared Error (RMSE) on test data/STDDEV = " + (rmse/stdev)
+      }
+      output.sortWith(_.adj > _.adj)
+      val best = output(0)
+      val bestModel = trainer(best.tree,trainBig)
+      Array(bestModel, output)
+
   }
   def gbt = (data: DataFrame, label: String, features: Array[String]) => {
 
@@ -333,36 +348,45 @@ object regressors {
     var df = mlhelp.assemble(data, features)
     df = df.withColumn("label", col("futurePrice"))
     df = df.select("features", "label")
-    val Array(trainingData, testData) = df.randomSplit(Array(0.7, 0.3))
+    val Array(trainBig, test) = df.randomSplit(Array(0.8, 0.2))
+    val Array(train, validation) = trainBig.randomSplit(Array(0.7, 0.3))
 
     // Train a GBT model.
-    val gbt = new GBTRegressor()
+    def trainer = (maxiter: Int, set: DataFrame)=> {
+       val gbt = new GBTRegressor()
       .setLabelCol("label")
       .setFeaturesCol("indexedFeatures")
-      .setMaxIter(10)
+      .setMaxIter(maxiter)
 
-    // Chain indexer and GBT in a Pipeline
-    val pipeline = new Pipeline()
-      .setStages(Array(mlhelp.featureIndex(df), gbt))
+      // Chain indexer and GBT in a Pipeline
+      val pipeline = new Pipeline()
+        .setStages(Array(mlhelp.featureIndex(df), gbt))
 
-    // Train model.  This also runs the indexer.
-    val model = pipeline.fit(trainingData)
+      // Train model.  This also runs the indexer.
+      val model = pipeline.fit(set)
 
-    // Make predictions.
-    val predictions = model.transform(testData)
+      // Make predictions.
+      val predictions = model.transform(test)
 
-    // Select example rows to display.
-    predictions.select("prediction", "label", "features").show(5)
+      // Select (prediction, true label) and compute test error
+      val evaluator = new RegressionEvaluator()
+        .setLabelCol("label")
+        .setPredictionCol("prediction")
+        .setMetricName("rmse")
+      val rmse = evaluator.evaluate(predictions)
+      var stdev = data.agg(stddev(label)).select("stddev_samp(futurePrice,0,0)").head().getDouble(0)
+      Prediction(rmse, rmse/stdev, maxiter)
+    }
+    case class Prediction(val rmse: Double, val adj: Double, val maxiter: Int)
+    val maxiters = Array(10, 20, 30, 40, 50 ,60,70, 80,90,100, 200, 300,400)
+    val output = for(maxiter <- maxiters) yield {
+      trainer(maxiter, train)
 
-    // Select (prediction, true label) and compute test error
-    val evaluator = new RegressionEvaluator()
-      .setLabelCol("label")
-      .setPredictionCol("prediction")
-      .setMetricName("rmse")
-    val rmse = evaluator.evaluate(predictions)
-    var stdev = data.agg(stddev(label)).select("stddev_samp(futurePrice,0,0)").head().getDouble(0)
-
-    "Root Mean Squared Error (RMSE) on test data = " + rmse + "\n" + "Adjusted Root Mean Squared Error (RMSE) on test data/STDDEV = " + (rmse/stdev)
+    }
+    val sorted = output.sortWith(_.adj > _.adj)
+    val best = sorted(0)
+    val bestModel = trainer(best.maxiter, trainBig)
+    Array(bestModel, output)
   }
 }
 
@@ -655,11 +679,17 @@ object configReg {
     val couplesDF = basetables(0)._1.select("availabilityZone", "instanceType").distinct()
     val couples = couplesDF.rdd.map(x => (x(0).asInstanceOf[String], x(1).asInstanceOf[String])).collect()
 
-    val RMSE = for (basetable <- basetables; couple <- couples.take(4)) yield {
-      (basetable._2, couple._1, couple._2,regressors.rf(basetable._1, labels(4), selectFeatures), regressors.gbt(basetable._1, labels(4), selectFeatures))
+    val RF = for (basetable <- basetables; couple <- couples.take(4)) yield {
+      (basetable._2, couple._1, couple._2,regressors.rf(basetable._1, labels(4), selectFeatures))
       }
+    val GBT = for (basetable <- basetables; couple <- couples.take(4)) yield {
+      (basetable._2, couple._1, couple._2,regressors.gbt(basetable._1, labels(4), selectFeatures))
+      }
+    println("Random Forest Regressions")
+    RF.foreach(x => println(x._1, x._2, x._3, x._4.deep.mkString("\n")))
 
-    RMSE.foreach(x => println(x._1, x._2, x._3, x._4, x._5))
+    println("GBT Regressions")
+    GBT.foreach(x => println(x._1, x._2, x._3, x._4.deep.mkString("\n")))
 
   }
 }
