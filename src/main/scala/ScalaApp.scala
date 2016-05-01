@@ -519,9 +519,9 @@ object basetable {
         .withColumn("priceChange", col("spotPrice") - col("t1"))
         .withColumn("priceChangeLag1", col("t1") - col("t2"))
         .withColumn("priceChangeLag2", col("t2") - col("t3"))
-        .withColumn("increaseTemp", (col("priceChange") > 0))
-        .withColumn("decreaseTemp", (col("priceChange") < 0))
-        .withColumn("sameTemp", (col("priceChange") === 0))
+        .withColumn("increaseTemp", (col("priceChange") > 0.001))
+        .withColumn("decreaseTemp", (col("priceChange") < -0.001))
+        .withColumn("sameTemp", (col("priceChange") > -0.001 || col("priceChange") < 0.001))
 
       df.registerTempTable("labelData")
       df = sqlContext.sql("""SELECT a.*, lead(a.increaseTemp) OVER (PARTITION BY a.AvailabilityZone, a.InstanceType ORDER BY a.aggregation) AS increase,
